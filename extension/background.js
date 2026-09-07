@@ -191,12 +191,53 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
     canceled.catch(() => {}).then(() => restoreReader(tabId)).catch(() => {});
   }
 });
+async function runReaderAction(tab, type) {
+  if (!Number.isInteger(tab?.id) || !originOf(tab.url)) return;
+  await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+  return chrome.tabs.sendMessage(tab.id, { type }, { frameId: 0 });
+}
+
+const readerMenus = [
+  { id: 'sulsul-start', title: '쉽게 읽기 / 이어 읽기' },
+  { id: 'sulsul-stop', title: '일시중지' },
+  { id: 'sulsul-restore', title: '원문 보기' },
+  { id: 'sulsul-end', title: '종료' }
+];
+let menuInstall = Promise.resolve();
+function installContextMenus() {
+  // Callback APIs also work on our minimum Chrome version (120).
+  const menuCall = (method, ...args) => new Promise((resolve, reject) => {
+    chrome.contextMenus[method](...args, () => {
+      const error = chrome.runtime.lastError;
+      error ? reject(new Error(error.message)) : resolve();
+    });
+  });
+  menuInstall = menuInstall.catch(() => {}).then(async () => {
+    await menuCall('removeAll');
+    const page = { contexts: ['all'], documentUrlPatterns: ['http://*/*', 'https://*/*'] };
+    await menuCall('create', { ...page, id: 'sulsul', title: '술술' });
+    for (const item of [...readerMenus, { id: 'sulsul-separator', type: 'separator' }, { id: 'sulsul-settings', title: 'AI 선택 · 설정' }]) {
+      await menuCall('create', { ...page, parentId: 'sulsul', ...item });
+    }
+  });
+  return menuInstall;
+}
+
+async function handleContextMenu(info, tab) {
+  if (info.menuItemId === 'sulsul-settings') return chrome.runtime.openOptionsPage();
+  if (readerMenus.some(item => item.id === info.menuItemId)) {
+    // Use the page that was right-clicked, even when the pointer is on a link or frame.
+    return runReaderAction(tab, info.menuItemId);
+  }
+}
+const refreshContextMenus = () => installContextMenus().catch(error => console.warn('술술 메뉴를 만들지 못했습니다.', error));
+chrome.runtime.onInstalled.addListener(refreshContextMenus);
+chrome.runtime.onStartup.addListener(refreshContextMenus);
+chrome.contextMenus.onClicked.addListener((info, tab) => handleContextMenu(info, tab).catch(() => {}));
+
 chrome.commands.onCommand.addListener(async command => {
   if (command !== 'toggle-reading') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
-  try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
-    await chrome.tabs.sendMessage(tab.id, { type: 'sulsul-toggle' });
-  } catch {} // Chrome internal pages cannot be modified.
+  try { await runReaderAction(tab, 'sulsul-toggle'); }
+  catch {} // Chrome internal pages cannot be modified.
 });

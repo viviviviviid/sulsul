@@ -10,6 +10,6 @@ export const sourceFiles = [...runtimeFiles,
   'docs/architecture.md','docs/publishing.md','docs/providers.md',
   '.github/workflows/ci.yml','.github/workflows/release.yml','.github/PULL_REQUEST_TEMPLATE.md',
   'scripts/check.mjs','scripts/files.mjs','scripts/package.mjs','scripts/zip.ps1',
-  'tests/core.test.mjs','tests/native.test.mjs','tests/navigation.test.mjs','tests/reader.test.mjs','tests/retry.test.mjs','tests/providers.test.mjs','tests/provider-switch.test.mjs',
+  'tests/core.test.mjs','tests/native.test.mjs','tests/navigation.test.mjs','tests/reader.test.mjs','tests/retry.test.mjs','tests/providers.test.mjs','tests/provider-switch.test.mjs','tests/context-menu.test.mjs',
   'tests/browser/general-web.mjs','tests/browser/auto-navigation.mjs','tests/browser/settings.mjs'
 ];

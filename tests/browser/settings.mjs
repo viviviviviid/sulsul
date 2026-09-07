@@ -12,6 +12,8 @@ fs.appendFileSync(path.join(ext,'background.js'),`
 globalThis.qaSettings=${JSON.stringify(catalog)};
 globalThis.qaRequests=[];
 globalThis.qaTests=0;
+globalThis.qaContextMenu=handleContextMenu;
+globalThis.qaFailNext=false;
 native=async(type,data,tabId,sourceUrl)=>{
  if(type==='settings-get')return structuredClone(qaSettings);
  if(type==='settings-save'){
@@ -25,6 +27,7 @@ native=async(type,data,tabId,sourceUrl)=>{
  if(type==='ollama-models')return ['local-model:8b','other-model:latest'];
  if(type==='login')return {message:'Google 로그인 창을 열었습니다.'};
  if(type==='translate'){
+  if(qaFailNext){qaFailNext=false;throw new Error('일시적인 테스트 연결 오류');}
   qaRequests.push({provider:qaSettings.selected,model:qaSettings.providers[qaSettings.selected].model});
   return {blocks:data.blocks.map(b=>({id:b.id,parts:b.parts.filter(p=>!p.locked).map(p=>({id:p.id,text:qaSettings.selected+' 한국어: '+p.text}))}))};
  }
@@ -35,7 +38,7 @@ const context=await chromium.launchPersistentContext(path.join(scratch,'profile'
 await context.route('https://reader.test/**',r=>r.fulfill({contentType:'text/html',body:'<html><body><main><h1>Read this page</h1><p>Clear writing makes complex ideas easier to understand.</p></main></body></html>'}));
 const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
 const extensionId=new URL(worker.url()).host;
-const options=await context.newPage();
+let options=await context.newPage();
 const waitStatus=text=>options.waitForFunction(text=>document.querySelector('#status').textContent.includes(text),text);
 try{
  await options.goto('chrome-extension://'+extensionId+'/options.html');await waitStatus('선택한 AI로만');
@@ -44,8 +47,39 @@ try{
  const page=await context.newPage();await page.goto('https://reader.test/page');
  const tabId=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://reader.test/page').id);
  const command=type=>worker.evaluate(({id,type})=>chrome.tabs.sendMessage(id,{type}),{id:tabId,type});
- await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
- await command('sulsul-toggle');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ const menu=menuItemId=>worker.evaluate(async({id,menuItemId})=>qaContextMenu({menuItemId},await chrome.tabs.get(id)),{id:tabId,menuItemId});
+ // Verify that Chrome accepted the real menu registration made by onInstalled.
+ await worker.evaluate(async()=>{
+  for(const id of ['sulsul','sulsul-start','sulsul-stop','sulsul-restore','sulsul-end','sulsul-separator','sulsul-settings']){
+   await chrome.contextMenus.update(id,{});
+  }
+ });
+ await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ await menu('sulsul-start');assert.equal((await command('sulsul-state')).mode,'running');
+ await menu('sulsul-stop');assert.equal((await command('sulsul-state')).mode,'paused');
+ assert.match(await page.locator('h1').innerText(),/^antigravity 한국어/);
+ await menu('sulsul-restore');assert.equal(await page.locator('h1').innerText(),'Read this page');
+ await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ await menu('sulsul-end');assert.equal((await command('sulsul-state')).mode,'off');
+ assert.equal(await page.locator('[data-sulsul-ui]').count(),0);
+ assert.equal(await page.locator('h1').innerText(),'Read this page');
+ assert.equal(await worker.evaluate(async id=>(await chrome.storage.session.get('reader:'+id))['reader:'+id],tabId),undefined);
+ // A failed request leaves the reader running; Start should retry it directly.
+ await worker.evaluate(async()=>{await chrome.storage.local.clear();qaFailNext=true;});
+ await page.reload();await menu('sulsul-start');
+ await worker.evaluate(async id=>{
+  const deadline=Date.now()+10000;
+  while(!(await chrome.tabs.sendMessage(id,{type:'sulsul-state'})).message.includes('테스트 연결 오류')){
+   if(Date.now()>deadline)throw new Error('Expected translation error');
+   await new Promise(resolve=>setTimeout(resolve,100));
+  }
+ },tabId);
+ await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ await options.close();
+ const openedSettings=context.waitForEvent('page');
+ await menu('sulsul-settings');options=await openedSettings;
+ await options.waitForURL('chrome-extension://'+extensionId+'/options.html');await waitStatus('선택한 AI로만');
+ console.log('PASS Chrome context menu registration, start/resume, pause, restore, end, error retry, and settings routing');
  await options.locator('#provider').selectOption('openai');
  assert.equal(await options.locator('#test').isDisabled(),true);
  assert.equal(await options.locator('#login').isVisible(),false);

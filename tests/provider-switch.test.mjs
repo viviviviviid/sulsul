@@ -22,7 +22,8 @@ function worker(){
     else if(message.type==='settings-save'){scope='second';answer({scope});}
   }};
   const context=vm.createContext({URL,crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
-    runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:event('message')},
+    runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
+    contextMenus:{onClicked:event('menu')},
     storage:{local:storage(local),session:storage(sessions)},
     tabs:{async get(){return {url:'https://example.com/page'};},async sendMessage(id,msg){events.push(msg.type);},onUpdated:event('updated'),onRemoved:event('removed')},
     commands:{onCommand:event('command')}

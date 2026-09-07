@@ -6,7 +6,7 @@ $runtime = Join-Path $work 'sulsul-agy'
 
 try {
   Write-Host ''
-  Write-Host '술술 0.6.0 - Windows 설치' -ForegroundColor Green
+  Write-Host '술술 0.6.1 - Windows 설치' -ForegroundColor Green
   Write-Host '이 폴더 안에 연결 프로그램을 설치합니다. 설치 후에는 폴더를 그대로 보관해 주세요.'
   Write-Host ''
   $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue

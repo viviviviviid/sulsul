@@ -10,7 +10,8 @@ function worker(data={},tabs=new Map([[7,{url:'https://docs.example.com/start',s
   const event=name=>({addListener(fn){callbacks[name]=fn;}});
   const storage={async get(key){return key===null?{...data}:{[key]:data[key]};},async set(value){Object.assign(data,value);},async remove(key){delete data[key];}};
   const context=vm.createContext({URL,crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
-    runtime:{id:'test',getURL(){return 'chrome-extension://test/';},onMessage:event('message')},
+    runtime:{id:'test',getURL(){return 'chrome-extension://test/';},onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
+    contextMenus:{onClicked:event('menu')},
     tabs:{async get(id){return tabs.get(id);},async sendMessage(){},onRemoved:event('removed'),onUpdated:event('updated')},
     storage:{session:storage},scripting:{async executeScript(args){injected.push(args.target.tabId);}},commands:{onCommand:event('command')}
   }});

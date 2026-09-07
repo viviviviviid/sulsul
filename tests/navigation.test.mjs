@@ -12,7 +12,8 @@ test('section links keep an active translation, but a different document cancels
     if(msg.type==='cancel')queueMicrotask(()=>callbacks.nativeMessage({id:msg.id,ok:true,result:{}}));
   }};
   const context=vm.createContext({crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
-    runtime:{id:'test',connectNative(){return port;},getURL(){return 'chrome-extension://test/';},onMessage:event('message')},
+    runtime:{id:'test',connectNative(){return port;},getURL(){return 'chrome-extension://test/';},onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
+    contextMenus:{onClicked:event('menu')},
     tabs:{onRemoved:event('removed'),onUpdated:event('updated')},commands:{onCommand:event('command')}
   }});
   vm.runInContext(readFileSync(new URL('../extension/background.js',import.meta.url),'utf8'),context);

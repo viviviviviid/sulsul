@@ -326,6 +326,7 @@
     scanTimer = setTimeout(() => { scanTimer = undefined; if (mode === 'running' && !busy && !waiting && !failed) start(); }, 500);
   }
 
+  function startReading() { return mode === 'running' && !failed ? Promise.resolve() : changeMode('running'); }
   function toggle() { return changeMode(mode === 'running' ? 'paused' : 'running'); }
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (sender.id !== chrome.runtime.id) return;
@@ -336,7 +337,7 @@
       reply(state()); return;
     }
     if (msg.type === 'sulsul-navigate') { navigate(); reply(state()); return; }
-    const action = { 'sulsul-toggle': toggle, 'sulsul-restore': showOriginal, 'sulsul-stop': stop, 'sulsul-end': finish }[msg.type];
+    const action = { 'sulsul-start': startReading, 'sulsul-toggle': toggle, 'sulsul-restore': showOriginal, 'sulsul-stop': stop, 'sulsul-end': finish }[msg.type];
     if (action) { action().then(() => reply(state())); return true; }
   });
   // Documentation sites navigate without a page reload. Never write a late response onto a new page.
