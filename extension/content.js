@@ -11,9 +11,10 @@
   let nextId = 0, dirty = false, failed = false, scanTimer;
   let knownParts = new WeakMap();
   let providerRevision = 'initial';
+  let measurements = null;
   const shadowObservers = new Map();
 
-  function state() { return { mode, waiting, busy, translated, complete, total: records.length, skipped, message }; }
+  function state() { return { mode, waiting, busy, failed, translated, complete, total: records.length, skipped, message, measurements }; }
   function findRoot() { return document.body; }
 
   function expected(record, part) { return record.applied && !part.locked ? record.result.get(part.id) : part.original; }
@@ -167,28 +168,45 @@
       style.textContent = `
         :host{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;font:12px/1.5 system-ui,-apple-system,"Malgun Gothic",sans-serif!important;color:#263e32!important}
         *{box-sizing:border-box}
-        section{display:flex;align-items:center;gap:4px;padding:5px;border:1px solid #ffffff80;border-radius:12px;background:#fffffc66;backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);box-shadow:0 2px 12px #122d220d;transition:background .18s,border-color .18s,box-shadow .18s}
-        button{border:0;border-radius:7px;padding:7px 10px;cursor:pointer;font:inherit;white-space:nowrap;background:#eaf2e948;color:#245b408c;transition:background .18s,color .18s}
-        button.end,button.original{background:transparent;color:#65746780}
-        section:hover,section:focus-within{background:#fffffced;border-color:#d9e1d8e6;box-shadow:0 3px 18px #122d2220}
-        section:hover button,section:focus-within button{background:#eaf2e9;color:#245b40}
-        section:hover button.end,section:focus-within button.end,section:hover button.original,section:focus-within button.original{background:transparent;color:#657467}
+        section{display:flex;align-items:center;padding:5px;border:1px solid #d9e1d8;border-radius:12px;background:#fffffced;opacity:.58;backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);box-shadow:0 2px 12px #122d220d;transition:opacity .18s,box-shadow .18s}
+        button{border:0;border-radius:7px;padding:8px 12px;cursor:pointer;font:inherit;white-space:nowrap;background:#eaf2e9;color:#245b40;transition:background .18s,color .18s}
+        button.main{min-width:92px}
+        button.extra{max-width:0;padding:8px 0;opacity:0;visibility:hidden;overflow:hidden;background:transparent;color:#657467;transition:max-width .18s,padding .18s,opacity .18s,visibility .18s}
+        section:hover,section:focus-within,section[data-error]{opacity:1;box-shadow:0 3px 18px #122d2220}
+        section:hover button.extra,section:focus-within button.extra{max-width:90px;padding:8px 12px;opacity:1;visibility:visible}
+        .action-text{display:none}.state-text{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+        section:hover .action-text,section:focus-within .action-text{display:inline}
+        section:hover .state-text,section:focus-within .state-text{display:none}
+        section[data-error] .main{background:#fff0e7;color:#93421f}
+        .alert{position:absolute;right:0;bottom:calc(100% + 10px);width:min(320px,calc(100vw - 32px));padding:13px 15px;border:1px solid #e8c7b5;border-radius:12px;background:#fffaf5;color:#78391f;font-size:12px;line-height:1.65;box-shadow:0 5px 24px #39200f1a;overflow-wrap:anywhere;white-space:pre-line}
+        .alert::after{content:'';position:absolute;bottom:-6px;right:24px;width:10px;height:10px;background:#fffaf5;border-right:1px solid #e8c7b5;border-bottom:1px solid #e8c7b5;transform:rotate(45deg)}
+        [hidden]{display:none!important}
         section button:hover{background:#dcebd9}section button.end:hover,section button.original:hover{background:#eef0e9}
         button:focus-visible{outline:2px solid #245b40;outline-offset:2px}
         .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
-        @media(prefers-reduced-motion:reduce){section,button{transition:none}}
+        @media(prefers-reduced-motion:reduce){section,button,button.extra{transition:none}}
       `;
       const section = document.createElement('section'); section.setAttribute('aria-label','술술 번역');
       const label = document.createElement('span'); label.className = 'sr-only'; label.setAttribute('role','status'); label.setAttribute('aria-live','polite');
-      const action = document.createElement('button'); action.addEventListener('click', () => { toggle(); });
-      const original = document.createElement('button'); original.className = 'original'; original.textContent = '원문'; original.title = '자동 번역을 일시중지하고 원문 보기'; original.addEventListener('click', () => { showOriginal(); });
-      const end = document.createElement('button'); end.className = 'end'; end.textContent = '종료'; end.title = '자동 번역을 끝내고 원문으로 돌아가기'; end.addEventListener('click', () => { finish(); });
-      section.append(original,action,end,label); shadow.append(style,section);
+      const alert = document.createElement('div'); alert.className='alert'; alert.setAttribute('role','alert'); alert.hidden=true;
+      const action = document.createElement('button'); action.className='main'; action.addEventListener('click', () => { toggle(); });
+      const stateText=document.createElement('span'); stateText.className='state-text'; stateText.setAttribute('aria-hidden','true');
+      const actionText=document.createElement('span'); actionText.className='action-text'; actionText.setAttribute('aria-hidden','true'); action.append(stateText,actionText);
+      const original = document.createElement('button'); original.className = 'original extra'; original.textContent = '원문'; original.title = '자동 번역을 일시중지하고 원문 보기'; original.addEventListener('click', () => { showOriginal(); });
+      const end = document.createElement('button'); end.className = 'end extra'; end.textContent = '종료'; end.title = '자동 번역을 끝내고 원문으로 돌아가기'; end.addEventListener('click', () => { finish(); });
+      section.append(original,end,action,label); shadow.append(style,alert,section);
       toolbar._label = label; toolbar._original = original; toolbar._action = action; toolbar._end = end;
+      toolbar._section=section; toolbar._alert=alert; toolbar._stateText=stateText; toolbar._actionText=actionText;
       document.documentElement.append(toolbar);
     }
-    toolbar._label.textContent = message;
-    toolbar._action.textContent = mode === 'paused' ? '이어 읽기' : '일시중지';
+    toolbar._label.textContent = failed ? '' : message;
+    toolbar._alert.hidden = !failed;
+    toolbar._alert.textContent = failed ? message+'\n아래 버튼을 눌러 다시 시도해 주세요.' : '';
+    toolbar._section.toggleAttribute('data-error',failed);
+    const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
+    toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
+    toolbar._actionText.textContent = actionText;
+    toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
     toolbar._action.title = message;
     publish();
   }
@@ -218,12 +236,14 @@
     interrupt(); restore();
     records=[]; knownParts=new WeakMap(); nextId=0; complete=0; skipped=0; translated=false; dirty=false; failed=false; oldDocument=null;
     providerRevision = nextRevision;
+    measurements = null;
   }
 
   async function changeMode(next) {
     const revision = ++control;
     mode = next;
-    if (next === 'running') { failed = false; oldDocument = null; }
+    failed = false;
+    if (next === 'running') oldDocument = null;
     const canceled = interrupt();
     if (next === 'off') {
       restore(); toolbar?.remove(); message = ''; publish();
@@ -237,6 +257,7 @@
     } catch(e) {
       if (revision !== control) return;
       mode = next === 'off' ? 'off' : 'paused';
+      failed = true;
       notify(e.message);
     }
   }
@@ -254,6 +275,7 @@
     waiting = true;
     lastChange = performance.now();
     const started = lastChange;
+    measurements = { startedAt:started, firstTextMs:null, viewportMs:null, totalMs:null, requests:0, cacheHits:0, batches:[] };
     const run = token;
     notify('본문이 준비되면 번역을 시작할게요…');
     const check = async () => {
@@ -270,52 +292,93 @@
     readyTimer = setTimeout(check, 200);
   }
 
+  function nextBatch() {
+    const pending = records.filter(r => r.status === 'new').map(r => {
+      const box = r.element.getBoundingClientRect();
+      const onScreen = box.bottom >= 0 && box.top <= innerHeight;
+      return { record:r, priority:onScreen ? (r.reading ? 0 : 1) : 2, distance:onScreen ? 0 : Math.abs(box.top) };
+    }).sort((a,b) => a.priority-b.priority || a.distance-b.distance);
+    if (!pending.length) return [];
+    const visible = pending[0].priority < 2;
+    const blockLimit = !complete ? 4 : visible ? 8 : 18;
+    const charLimit = !complete ? 1800 : visible ? 3200 : 7000;
+    const current = []; let size=0, fragments=0;
+    for (const {record,priority} of pending) {
+      const n = record.parts.reduce((v,p) => v+p.original.length,0);
+      if (current.length && (current.length >= blockLimit || size+n > charLimit || fragments+record.parts.length > 1200 || (visible && priority === 2))) break;
+      current.push(record); size+=n; fragments+=record.parts.length;
+    }
+    return current;
+  }
+
+  function measureVisible(stats) {
+    if (!stats || !complete) return;
+    const elapsed = Math.round(performance.now()-stats.startedAt);
+    stats.firstTextMs ??= elapsed;
+    if (stats.viewportMs === null && !records.some(r => {
+      const box=r.element.getBoundingClientRect();
+      return !r.applied && r.status !== 'skipped' && box.bottom >= 0 && box.top <= innerHeight;
+    })) stats.viewportMs=elapsed;
+  }
+
   async function start() {
     if (busy || mode !== 'running' || failed) return;
     const run = ++token;
     busy = true;
     currentUrl = pageUrl();
+    const inFlight = new Map();
+    const stats = measurements;
     try {
       dirty = true;
       while (true) {
-        if (run !== token || currentUrl !== pageUrl()) return;
-        if (dirty) { dirty = false; collect(); displayCached(); }
-        const pending = records.filter(r => r.status === 'new').map(r => {
-          const box = r.element.getBoundingClientRect();
-          const onScreen = box.bottom >= 0 && box.top <= innerHeight;
-          return { record: r, priority: onScreen ? (r.reading ? 0 : 1) : 2, distance: onScreen ? 0 : Math.abs(box.top) };
-        }).sort((a,b) => a.priority - b.priority || a.distance - b.distance);
-        if (!pending.length) break;
-        const current = []; let size = 0, fragments = 0;
-        for (const {record} of pending) {
-          const n = record.parts.reduce((v,p) => v + p.original.length, 0);
-          if (current.length && (current.length >= (complete ? 18 : 4) || size+n > (complete ? 7000 : 1800) || fragments+record.parts.length > 1200)) break;
-          current.push(record); size += n; fragments += record.parts.length;
+        if (run !== token || mode !== 'running' || currentUrl !== pageUrl()) return;
+        // Keep references stable while either request is using this DOM snapshot.
+        if (dirty && !inFlight.size) { dirty=false; collect(); displayCached(); measureVisible(stats); }
+        while (inFlight.size < 2) {
+          const current = nextBatch();
+          if (!current.length) break;
+          const page = { title:document.title.slice(0,500), url:location.origin+location.pathname, headings:records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.original).join('').slice(0,240)).slice(0,60), introduction:records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.original).join('')).join('\n').slice(0,2400) };
+          const first=records.indexOf(current[0]), last=records.indexOf(current.at(-1))+1;
+          const data = {page,before:records[first-1]?.parts.map(p=>p.original).join('').slice(-1000)||'',after:records[last]?.parts.map(p=>p.original).join('').slice(0,1000)||'',blocks:current.map(serialize)};
+          for (const r of current) r.status='pending';
+          const id = current[0].id, sent = performance.now();
+          if (stats) { stats.requests++; stats.totalMs=null; }
+          // Resolve failures as values so the other in-flight response is always observed.
+          const task = send('translate',data).then(out => ({id,current,out,sent}),error => ({id,error}));
+          inFlight.set(id,task);
         }
-        const page = { title: document.title.slice(0,500), url: location.origin + location.pathname, headings: records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.original).join('').slice(0,240)).slice(0,60), introduction: records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.original).join('')).join('\n').slice(0,2400) };
-        const first = records.indexOf(current[0]), last = records.indexOf(current.at(-1)) + 1;
-        const data = { page, before: records[first-1]?.parts.map(p=>p.original).join('').slice(-1000) || '', after: records[last]?.parts.map(p=>p.original).join('').slice(0,1000) || '', blocks: current.map(serialize) };
-        for (const r of current) r.status = 'pending';
+        if (!inFlight.size) { if (dirty) continue; break; }
         notify(`번역 항목 ${complete} / ${records.length}개 · 이어서 읽고 있어요…`);
-        const out = await send('translate', data);
-        if (run !== token || currentUrl !== pageUrl()) return;
+        const finished = await Promise.race(inFlight.values());
+        inFlight.delete(finished.id);
+        if (run !== token || mode !== 'running' || currentUrl !== pageUrl()) return;
+        if (finished.error) throw finished.error;
+        const {current,out,sent} = finished;
         if (!Array.isArray(out?.blocks) || out.blocks.length !== current.length) throw new Error('번역 항목 수가 맞지 않습니다.');
+        const applyStarted = performance.now();
         for (const r of current) {
-          if (!apply(r, out.blocks.find(b => b.id === r.id))) { r.status = 'skipped'; dirty = true; }
+          if (!apply(r,out.blocks.find(b => b.id === r.id))) { r.status='skipped'; dirty=true; }
         }
         refreshCounts();
+        measureVisible(stats);
+        if (stats) {
+          if (out.cached) stats.cacheHits++;
+          stats.batches.push({...out.timings,blocks:current.length,cached:!!out.cached,roundTripMs:Math.round(applyStarted-sent),applyMs:Math.round(performance.now()-applyStarted)});
+          if (stats.batches.length > 20) stats.batches.shift();
+        }
         notify(`번역 항목 ${complete} / ${records.length}개 · 이어서 바꾸고 있어요…`);
       }
-      busy = false;
-      notify(!records.length ? '영어 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `번역 항목 ${complete}개 완료 · 너무 긴 항목 ${skipped}개는 원문 유지` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
+      busy=false;
+      if (stats && stats.totalMs === null) stats.totalMs=Math.round(performance.now()-stats.startedAt);
+      notify(!records.length ? '영어 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `번역 항목 ${skipped}개는 원문 유지` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
     } catch(e) {
       if (run !== token) return;
-      busy = false;
-      failed = true;
-      for (const r of records) if (r.status === 'pending') r.status = 'new';
+      failed=true;
+      const canceled=interrupt();
       notify(e.message);
+      await canceled;
     } finally {
-      if (run === token) { busy = false; if (dirty && !failed) requestScan(); }
+      if (run === token) { busy=false; if (dirty && !failed) requestScan(); }
     }
   }
 
@@ -327,7 +390,7 @@
   }
 
   function startReading() { return mode === 'running' && !failed ? Promise.resolve() : changeMode('running'); }
-  function toggle() { return changeMode(mode === 'running' ? 'paused' : 'running'); }
+  function toggle() { return changeMode(failed || mode !== 'running' ? 'running' : 'paused'); }
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (sender.id !== chrome.runtime.id) return;
     if (msg.type === 'sulsul-state') { reply(state()); return; }

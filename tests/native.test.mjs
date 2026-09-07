@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { encodeMessage, createDecoder } from '../host/core.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const file=path.join(root,'host','config.json');
-test('compiled windowless host answers native protocol and exits on pipe closure',{skip:!fs.existsSync(file)},async()=>{
+const launcher=path.join(root,'host',process.platform==='win32'?'sulsul-host.exe':'sulsul-host');
+test('native launcher answers protocol and exits on pipe closure',{skip:!fs.existsSync(file)},async()=>{
   const config=JSON.parse(fs.readFileSync(file,'utf8'));
-  const child=spawn(path.join(root,'host','sulsul-host.exe'),[`chrome-extension://${config.extensionId}/`],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+  const child=spawn(launcher,[`chrome-extension://${config.extensionId}/`],{windowsHide:true,stdio:['pipe','pipe','pipe']});
   try {
     const result=await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>reject(new Error('native handshake timed out')),10000);
@@ -21,7 +22,7 @@ test('compiled windowless host answers native protocol and exits on pipe closure
   } finally { child.stdin.end(); setTimeout(()=>child.kill(),2000).unref(); }
 });
 test('unregistered extension cannot call the native host',{skip:!fs.existsSync(file)},async()=>{
-  const child=spawn(path.join(root,'host','sulsul-host.exe'),['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+  const child=spawn(launcher,['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
   const code=await new Promise((resolve,reject)=>{child.on('exit',resolve);child.on('error',reject);});
   assert.equal(code,1);
 });

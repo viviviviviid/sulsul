@@ -15,13 +15,18 @@ writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest,null,2));
 writeFileSync(path.join(ext,'background.js'),readFileSync(path.join(ext,'background.js'),'utf8')+`
 globalThis.qaCalls=[];
 globalThis.qaHold=false;
+globalThis.qaHeld=new Map();
+globalThis.qaRelease=()=>{for(const task of qaHeld.values())task.resolve();qaHeld.clear();};
+globalThis.qaMaxActive=0;
 globalThis.qaMalformed=false;
-native=async(type,data,tabId,sourceUrl)=>{
+native=async(type,data,tabId,sourceUrl,scope,requestId)=>{
+ if(type==='settings-get')return {maxConcurrentTranslations:2};
+ if(type==='cancel'){for(const id of data?.ids || qaHeld.keys()){const task=qaHeld.get(id);if(task){qaHeld.delete(id);task.reject(new Error('번역을 중지했습니다.'));}}return {};}
  if(type!=='translate')return {};
  qaCalls.push({data,tabId,sourceUrl});
  if(qaMalformed)return {blocks:[]};
  const result={blocks:data.blocks.map(b=>({id:b.id,parts:b.parts.filter(p=>!p.locked).map(p=>({id:p.id,text:'번역: '+p.text}))}))};
- if(qaHold)await new Promise(resolve=>{globalThis.qaRelease=resolve;});
+ if(qaHold)await new Promise((resolve,reject)=>{qaHeld.set(requestId,{resolve:()=>{qaHeld.delete(requestId);resolve();},reject});qaMaxActive=Math.max(qaMaxActive,qaHeld.size);});
  return result;
 };
 `);
@@ -57,7 +62,18 @@ try {
  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
  await worker.evaluate(()=>qaHold=true);
  await command('sulsul-toggle');
- await until(async()=>await count()>0,'first request');
+ await until(async()=>await count()===2,'two concurrent requests');
+ assert.equal(await worker.evaluate(()=>qaHeld.size),2);
+ const secondText=await worker.evaluate(()=>qaCalls[1].data.blocks[0].parts.find(p=>!p.locked).text);
+ await worker.evaluate(()=>[...qaHeld.values()][1].resolve());
+ await until(()=>page.evaluate(text=>document.body.textContent.includes('번역: '+text),secondText),'second batch applies before first');
+ assert.equal(await worker.evaluate(()=>qaMaxActive),2);
+ const early=(await state()).measurements;
+ assert.ok(early.firstTextMs>=0);assert.equal(early.totalMs,null);
+ const firstBatches=await worker.evaluate(()=>qaCalls.slice(0,2).map(c=>c.data.blocks.map(b=>b.id)));
+ assert.ok(firstBatches.every(ids=>ids.length<=4));
+ assert.equal(new Set(firstBatches.flat()).size,firstBatches.flat().length,'parallel batches never repeat a block');
+ console.log('PASS two bounded parallel batches, out-of-order display and first-text timing');
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p id="during-request">Comment arriving while the first translation is running.</p>'));
  await worker.evaluate(()=>{qaHold=false;qaRelease();});
  await translated('#during-request');await settled();
@@ -106,6 +122,9 @@ try {
  assert.equal(await page.locator('#infinite-title').innerText(),'New post appended by infinite scroll');
  assert.equal(await page.evaluate(()=>closedRoot.querySelector('p').textContent),'A comment inside a closed component.');
  const beforeCached=await count();await command('sulsul-toggle');await settled();assert.equal(await count(),beforeCached);
+ const restoredStats=(await state()).measurements;
+ assert.equal(restoredStats.requests,0);
+ assert.equal(typeof restoredStats.firstTextMs,'number');assert.equal(typeof restoredStats.viewportMs,'number');
  await command('sulsul-end');const ended=await count();
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p>New reply after exit.</p>'));
  await page.waitForTimeout(3300);assert.equal(await count(),ended);assert.equal(await page.locator('[data-sulsul-ui]').count(),0);

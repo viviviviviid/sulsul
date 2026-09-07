@@ -34,6 +34,10 @@ test('API credentials and arbitrary Node startup options do not enter CLI enviro
   const env=makeEnvironment({profile:'P',settings:'S',systemPrompt:'M'});
   if(before===undefined) delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=before;
   assert.equal(env.GEMINI_API_KEY,undefined);assert.equal(env.NODE_OPTIONS,undefined);assert.equal(env.USERPROFILE,'P');
+  if (process.platform !== 'win32') {
+    assert.equal(env.HOME,'P');assert.equal(env.XDG_CONFIG_HOME,'P/.config');
+    assert.notEqual(process.env.HOME,'P');
+  }
 });
 test('quota failures cannot silently switch to paid API',()=>assert.match(readableError('429 RESOURCE_EXHAUSTED quota exceeded'),/전환하지/));
 test('retired consumer login is reported as a migration error, not a retry-login error',()=>{

@@ -16,11 +16,16 @@ writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest,null,2));
 writeFileSync(path.join(ext,'background.js'),readFileSync(path.join(ext,'background.js'),'utf8')+`
 globalThis.qaCalls=[];
 globalThis.qaHold=false;
-native=async(type,data,tabId,sourceUrl)=>{
+globalThis.qaHeld=new Map();
+globalThis.qaRelease=()=>{for(const task of qaHeld.values())task.resolve();qaHeld.clear();};
+globalThis.qaMaxActive=0;
+native=async(type,data,tabId,sourceUrl,scope,requestId)=>{
+ if(type==='settings-get')return {maxConcurrentTranslations:2};
+ if(type==='cancel'){for(const id of data?.ids || qaHeld.keys()){const task=qaHeld.get(id);if(task){qaHeld.delete(id);task.reject(new Error('번역을 중지했습니다.'));}}return {};}
   if(type!=='translate')return {};
   qaCalls.push({data,tabId,sourceUrl});
   const result={blocks:data.blocks.map(b=>({id:b.id,parts:b.parts.filter(p=>!p.locked).map(p=>({id:p.id,text:'쉬운 한국어: '+p.text}))}))};
-  if(qaHold)await new Promise(resolve=>{globalThis.qaRelease=resolve;});
+  if(qaHold)await new Promise((resolve,reject)=>{qaHeld.set(requestId,{resolve:()=>{qaHeld.delete(requestId);resolve();},reject});qaMaxActive=Math.max(qaMaxActive,qaHeld.size);});
   return result;
 };
 `);
@@ -34,7 +39,7 @@ let tabId;
 const command=type=>worker.evaluate(({id,type})=>chrome.tabs.sendMessage(id,{type}),{id:tabId,type});
 const state=()=>command('sulsul-state');
 const count=()=>worker.evaluate(()=>qaCalls.length);
-const isolated=op=>worker.evaluate(async({id,op})=>(await chrome.scripting.executeScript({target:{tabId:id},func:op=>{const bar=document.querySelector('[data-sulsul-ui]');if(op==='label')return bar._action.textContent;if(op==='action')bar._action.click();if(op==='end')bar._end.click();},args:[op]}))[0].result,{id:tabId,op});
+const isolated=op=>worker.evaluate(async({id,op})=>(await chrome.scripting.executeScript({target:{tabId:id},func:op=>{const bar=document.querySelector('[data-sulsul-ui]');if(op==='label')return bar._actionText.textContent;if(op==='action')bar._action.click();if(op==='end')bar._end.click();},args:[op]}))[0].result,{id:tabId,op});
 async function until(predicate,label,timeout=12000){const end=Date.now()+timeout;while(Date.now()<end){try{if(await predicate())return;}catch{}await new Promise(r=>setTimeout(r,100));}throw new Error('Timed out: '+label+' '+JSON.stringify(await state().catch(()=>null)));}
 async function done(){await until(async()=>{const s=await state();return s.translated&&!s.busy&&!s.waiting;},'translation');}
 try {

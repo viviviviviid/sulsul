@@ -26,7 +26,9 @@ test('all four HTTP providers normalize the same fragments and never send tools'
       const body=JSON.parse(init.body);assert.equal(body.tools,undefined);assert.equal(JSON.stringify(body).includes('finish tool'),false);
       return response(responses[id]);
     });
-    assert.deepEqual(result,translated);
+    assert.deepEqual(result.blocks,translated.blocks);
+    assert.equal(result.timings.attempts,1);
+    for(const key of ['providerTotalMs','responseMs','validationMs'])assert.ok(result.timings[key]>=0);
     assert.equal(calls.length,id==='ollama'?2:1);
     const last=calls.at(-1);
     if(id==='openai'){assert.equal(last.url,'https://api.openai.com/v1/responses');assert.equal(JSON.parse(last.init.body).store,false);assert.equal(JSON.parse(last.init.body).text.format.strict,true);}
@@ -101,7 +103,7 @@ test('settings preserve per-provider keys, redact them, and change cache scopes'
   await settings.save({provider:'antigravity',model:'gemini-3.8-flash-low',apiKey:''});
   assert.equal((await settings.credentials()).apiKey,undefined);
 });
-test('Windows DPAPI encrypts and decrypts a fake credential without plaintext on disk',{skip:process.platform!=='win32'},async()=>{
+test('OS-backed storage encrypts and decrypts a fake credential without plaintext on disk',{skip:process.platform!=='win32' && !(process.platform==='darwin' && fs.existsSync(new URL('../host/secret-store-macos',import.meta.url)))},async()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-dpapi-'));
   const settings=new ProviderSettings({profile:dir});
   await settings.save({provider:'openai',model:'test-model',apiKey:'SULSUL_FAKE_CREDENTIAL_NOT_A_REAL_KEY'});

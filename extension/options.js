@@ -40,7 +40,7 @@ $('settings').addEventListener('submit',event => {
     dirty = false; render(); status('저장했어요. 연결 테스트를 하거나 페이지에서 이어 읽기를 눌러 주세요.');
   });
 });
-$('test').addEventListener('click',() => action(async () => { status('짧은 예문으로 연결을 확인하고 있어요. 최대 1분 정도 걸릴 수 있어요.'); status((await rpc('provider-test')).message); }));
+$('test').addEventListener('click',() => action(async () => { status('앞선 번역이 끝나면 짧은 예문으로 연결을 확인합니다.'); status((await rpc('provider-test')).message); }));
 $('login').addEventListener('click',() => action(async () => status((await rpc('login')).message)));
 $('load-models').addEventListener('click',() => action(async () => {
   const models = await rpc('ollama-models',{endpoint:$('endpoint').value});

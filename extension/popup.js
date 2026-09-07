@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let tabId, available = false;
 function showState(s) {
-  $('button-text').textContent = s.mode === 'running' ? '일시중지' : s.mode === 'paused' ? '이어 읽기' : '쉽게 읽기';
+  $('button-text').textContent = s.failed ? '다시 시도' : s.mode === 'running' ? '일시중지' : s.mode === 'paused' ? '이어 읽기' : '쉽게 읽기';
   $('restore').hidden = !s.translated;
   $('end').hidden = !s.mode || s.mode === 'off';
   $('progress').textContent = s.message || '';

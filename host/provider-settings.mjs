@@ -38,14 +38,17 @@ export function localEndpoint(value = 'http://127.0.0.1:11434') {
 
 export function protectSecret(value, mode = 'protect') {
   return new Promise((resolve, reject) => {
-    if (process.platform !== 'win32') return reject(new Error('API 키 저장은 현재 Windows에서 지원합니다.'));
+    if (!['win32','darwin'].includes(process.platform)) return reject(new Error('API 키 저장은 Windows와 macOS에서 지원합니다.'));
+    if (!['protect','unprotect'].includes(mode)) return reject(new Error('지원하지 않는 키 저장 요청입니다.'));
+    const mac = process.platform === 'darwin';
     const script = fileURLToPath(new URL('./secret-store.ps1', import.meta.url));
-    const ps = path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
-    const child = spawn(ps, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Mode',mode], { windowsHide:true, shell:false, stdio:['pipe','pipe','ignore'] });
+    const command = mac ? fileURLToPath(new URL('./secret-store-macos',import.meta.url)) : path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
+    const args = mac ? [mode] : ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Mode',mode];
+    const child = spawn(command, args, { windowsHide:true, shell:false, stdio:['pipe','pipe','ignore'] });
     let output = '', done = false;
     const finish = (ok) => {
       if (done) return; done = true; clearTimeout(timer); child.kill();
-      if (!ok || !/^[a-zA-Z0-9+/=]+$/.test(output)) return reject(new Error('Windows에서 API 키를 읽거나 저장하지 못했습니다. AI 설정에서 키를 다시 입력해 주세요.'));
+      if (!ok || !/^[a-zA-Z0-9+/=]+$/.test(output)) return reject(new Error('이 PC에서 API 키를 읽거나 저장하지 못했습니다. 설치 프로그램을 실행하고 AI 설정에서 키를 다시 입력해 주세요.'));
       resolve(mode === 'protect' ? output : Buffer.from(output,'base64').toString('utf8'));
     };
     const timer = setTimeout(() => finish(false), 10_000);

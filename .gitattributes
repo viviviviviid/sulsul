@@ -6,5 +6,6 @@
 *.yml text eol=lf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+*.command text eol=lf
+*.swift text eol=lf
 *.zip binary
-

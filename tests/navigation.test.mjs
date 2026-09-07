@@ -11,13 +11,21 @@ test('section links keep an active translation, but a different document cancels
     sent.push(msg);
     if(msg.type==='cancel')queueMicrotask(()=>callbacks.nativeMessage({id:msg.id,ok:true,result:{}}));
   }};
-  const context=vm.createContext({crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
+  const context=vm.createContext({URL,crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
     runtime:{id:'test',connectNative(){return port;},getURL(){return 'chrome-extension://test/';},onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
     contextMenus:{onClicked:event('menu')},
-    tabs:{onRemoved:event('removed'),onUpdated:event('updated')},commands:{onCommand:event('command')}
+    storage:{local:{async get(){return {};}},session:{async get(key){return {[key]:{mode:'running',origin:'https://docs.example.com'}};}}},
+    tabs:{async get(){return {url:'https://docs.example.com/guide?version=2#start'};},onRemoved:event('removed'),onUpdated:event('updated')},commands:{onCommand:event('command')}
   }});
   vm.runInContext(readFileSync(new URL('../extension/background.js',import.meta.url),'utf8'),context);
-  const task=context.native('translate',{},7,'https://docs.example.com/guide?version=2#start');
+  const task=context.translate({},7,'https://docs.example.com/guide?version=2#start').catch(e=>e);
+  await Promise.resolve();
+  callbacks.nativeMessage({id:sent[0].id,ok:true,result:{scope:'test'}});
+  const end=Date.now()+2000;
+  while(!sent.some(m=>m.type==='translate')){
+    if(Date.now()>end)assert.fail('translation did not start');
+    await new Promise(resolve=>setTimeout(resolve,5));
+  }
   try{
     callbacks.updated(7,{url:'https://docs.example.com/guide?version=2#details'});
     await Promise.resolve();
@@ -26,7 +34,7 @@ test('section links keep an active translation, but a different document cancels
     await Promise.resolve();
     assert.equal(sent.filter(m=>m.type==='cancel').length,1);
   }finally{
-    callbacks.nativeMessage({id:sent[0].id,ok:true,result:{}});
-    await task;
+    callbacks.nativeMessage({id:sent.find(m=>m.type==='translate').id,ok:true,result:{}});
+    assert.match((await task).message,/중지/);
   }
 });

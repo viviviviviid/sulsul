@@ -4,6 +4,9 @@
 /host/node-path.txt
 /host/com.sulsul.gemini.json
 /host/*.exe
+/host/sulsul-host
+/host/login.command
+/host/secret-store-macos
 **/providers.json*
 **/verified.json
 **/.gemini/
@@ -20,4 +23,3 @@ test-results/
 playwright-report/
 .DS_Store
 Thumbs.db
-

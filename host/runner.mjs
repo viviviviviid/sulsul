@@ -11,8 +11,14 @@ export function cliArguments(config) {
 export function makeEnvironment(config) {
   // Dedicated CLI profile. Never inherit API keys, endpoints or startup hooks.
   const env = {};
-  for (const key of ['SystemRoot','WINDIR','ComSpec','PATH','PATHEXT','TEMP','TMP','USERNAME','PROCESSOR_ARCHITECTURE','NUMBER_OF_PROCESSORS']) {
+  for (const key of ['SystemRoot','WINDIR','ComSpec','PATH','PATHEXT','TEMP','TMP','TMPDIR','TERM','LANG','LC_CTYPE','USER','LOGNAME','USERNAME','PROCESSOR_ARCHITECTURE','NUMBER_OF_PROCESSORS']) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  if (process.platform !== 'win32') {
+    // This child process gets its own home; the parent environment is untouched.
+    env.HOME = config.profile;
+    env.XDG_CONFIG_HOME = path.join(config.profile,'.config');
+    env.XDG_CACHE_HOME = path.join(config.profile,'.cache');
   }
   return Object.assign(env, {
     USERPROFILE:config.profile,
@@ -53,10 +59,15 @@ export async function withFormatRetry(config, data, signal, run) {
 export function translate(config, data, signal) {
   const deadline = AbortSignal.timeout(240_000);
   const combined = signal ? AbortSignal.any([signal,deadline]) : deadline;
-  return withFormatRetry(config,data,combined,runTranslation);
+  const started = performance.now();
+  let attempts = 0;
+  return withFormatRetry(config,data,combined,(...args) => { attempts++; return runTranslation(...args); })
+    .then(result => ({...result,timings:{...result.timings,attempts,providerTotalMs:Math.round(performance.now()-started)}}));
 }
 
 function runTranslation(config, data, signal) {
+  const started = performance.now();
+  const timings = {};
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('번역을 중지했습니다.'));
     let prompt;
@@ -70,6 +81,8 @@ function runTranslation(config, data, signal) {
     } catch(e) { reject(e); return; }
     const args = cliArguments(config);
     const child = spawn(config.cli, args, { cwd:config.workspace, env:makeEnvironment(config), shell:false, windowsHide:true, stdio:['pipe','pipe','pipe'] });
+    timings.promptChars = prompt.length;
+    child.once('spawn',() => { timings.spawnMs=Math.round(performance.now()-started); });
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
     let buffer='', stderr='', settled=false, bytes=0;
     const finish = (error, value) => {
@@ -100,12 +113,16 @@ function runTranslation(config, data, signal) {
         return finish(new Error(readableError(result?.error || stderr)));
       }
       try {
+        const parsing = performance.now();
         const value=parseTranslation(result.structured_output ? JSON.stringify(result.structured_output) : result.response,data);
+        timings.resultMs=Math.round(parsing-started);
+        timings.validationMs=Math.round(performance.now()-parsing);
         try { writeFileSync(path.join(config.profile,'verified.json'),JSON.stringify({at:Date.now()})); } catch {}
-        finish(null,value);
+        finish(null,{...value,timings});
       } catch(e) { e.code='INVALID_TRANSLATION'; finish(e); }
     };
     child.stdout.on('data',chunk=>{
+      timings.firstOutputMs ??= Math.round(performance.now()-started);
       bytes+=Buffer.byteLength(chunk);
       if (bytes>4_000_000) return finish(new Error('Gemini 응답이 너무 큽니다.'));
       buffer+=chunk;

@@ -86,12 +86,15 @@ export async function assertLocalModel(provider, signal, fetcher = fetch) {
 }
 
 export async function translateAPI(provider, data, signal, fetcher = fetch) {
+  const started = performance.now();
   const deadline = AbortSignal.timeout(240_000);
   const combined = signal ? AbortSignal.any([signal,deadline]) : deadline;
   const request = apiRequest(provider,data);
   if (provider.id === 'ollama') await assertLocalModel(provider,combined,fetcher);
   const response = await requestJSON(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(request.body),signal:combined},fetcher);
-  return parseTranslation(extractText(provider.id,response),data);
+  const parsing = performance.now();
+  const result = parseTranslation(extractText(provider.id,response),data);
+  return {...result,timings:{providerTotalMs:Math.round(performance.now()-started),responseMs:Math.round(parsing-started),validationMs:Math.round(performance.now()-parsing),attempts:1}};
 }
 
 export class ProviderRouter {

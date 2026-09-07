@@ -7,7 +7,7 @@ import { PROVIDERS } from '../../host/provider-settings.mjs';
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-settings-browser-'));
 const ext=path.join(scratch,'extension');fs.cpSync('extension',ext,{recursive:true});
 const manifest=JSON.parse(fs.readFileSync(path.join(ext,'manifest.json'),'utf8'));manifest.host_permissions=['https://reader.test/*'];fs.writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest));
-const catalog={selected:'antigravity',scope:'initial',providers:JSON.parse(JSON.stringify(PROVIDERS))};
+const catalog={selected:'antigravity',scope:'initial',maxConcurrentTranslations:2,providers:JSON.parse(JSON.stringify(PROVIDERS))};
 fs.appendFileSync(path.join(ext,'background.js'),`
 globalThis.qaSettings=${JSON.stringify(catalog)};
 globalThis.qaRequests=[];
@@ -47,25 +47,48 @@ try{
  const page=await context.newPage();await page.goto('https://reader.test/page');
  const tabId=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://reader.test/page').id);
  const command=type=>worker.evaluate(({id,type})=>chrome.tabs.sendMessage(id,{type}),{id:tabId,type});
+ const barState=()=>worker.evaluate(async id=>(await chrome.scripting.executeScript({target:{tabId:id},func:()=>{
+  const bar=document.querySelector('[data-sulsul-ui]');
+  const buttons=[bar._original,bar._end,bar._action];
+  const rect=bar._action.getBoundingClientRect();
+  return {visible:buttons.filter(b=>getComputedStyle(b).visibility!=='hidden'&&b.getBoundingClientRect().width>0).length,
+   opacity:Number(getComputedStyle(bar._section).opacity),width:bar.getBoundingClientRect().width,
+   alertVisible:!bar._alert.hidden,alert:bar._alert.textContent,status:bar._stateText.textContent,action:bar._actionText.textContent,
+   main:{x:rect.x+rect.width/2,y:rect.y+rect.height/2}};
+ }}))[0].result,tabId);
  const menu=menuItemId=>worker.evaluate(async({id,menuItemId})=>qaContextMenu({menuItemId},await chrome.tabs.get(id)),{id:tabId,menuItemId});
  // Verify that Chrome accepted the real menu registration made by onInstalled.
  await worker.evaluate(async()=>{
-  for(const id of ['sulsul','sulsul-start','sulsul-stop','sulsul-restore','sulsul-end','sulsul-separator','sulsul-settings']){
-   await chrome.contextMenus.update(id,{});
-  }
+  await chrome.contextMenus.update('sulsul-start',{});
  });
+ for(const id of ['sulsul','sulsul-stop','sulsul-restore','sulsul-end','sulsul-separator','sulsul-settings']){
+  await assert.rejects(worker.evaluate(id=>chrome.contextMenus.update(id,{}),id));
+ }
  await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ await page.mouse.move(0,0);await page.waitForTimeout(250);
+ const collapsed=await barState();assert.equal(collapsed.visible,1);assert.ok(collapsed.opacity<1);
+ assert.equal(collapsed.status,'번역 완료');assert.equal(collapsed.alertVisible,false);
+ await page.locator('[data-sulsul-ui]').hover();await page.waitForTimeout(250);
+ const expanded=await barState();assert.equal(expanded.visible,3);assert.equal(expanded.opacity,1);assert.ok(expanded.width>collapsed.width);
+ await page.screenshot({path:path.join(scratch,'toolbar-expanded.png')});
+ await page.mouse.move(0,0);await page.waitForTimeout(250);assert.equal((await barState()).visible,1);
+ await page.screenshot({path:path.join(scratch,'toolbar-collapsed.png')});
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('[data-sulsul-ui]')._action.focus()}),tabId);
+ await page.waitForTimeout(250);assert.equal((await barState()).visible,3,'keyboard focus reveals controls');
+ await page.mouse.click(10,10);
+ console.log('PASS compact status, hover expansion, full opacity and keyboard access');
  await menu('sulsul-start');assert.equal((await command('sulsul-state')).mode,'running');
- await menu('sulsul-stop');assert.equal((await command('sulsul-state')).mode,'paused');
+ await command('sulsul-stop');assert.equal((await command('sulsul-state')).mode,'paused');
  assert.match(await page.locator('h1').innerText(),/^antigravity 한국어/);
- await menu('sulsul-restore');assert.equal(await page.locator('h1').innerText(),'Read this page');
+ await command('sulsul-restore');assert.equal(await page.locator('h1').innerText(),'Read this page');
  await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
- await menu('sulsul-end');assert.equal((await command('sulsul-state')).mode,'off');
+ await command('sulsul-end');assert.equal((await command('sulsul-state')).mode,'off');
  assert.equal(await page.locator('[data-sulsul-ui]').count(),0);
  assert.equal(await page.locator('h1').innerText(),'Read this page');
  assert.equal(await worker.evaluate(async id=>(await chrome.storage.session.get('reader:'+id))['reader:'+id],tabId),undefined);
  // A failed request leaves the reader running; Start should retry it directly.
- await worker.evaluate(async()=>{await chrome.storage.local.clear();qaFailNext=true;});
+ await options.evaluate(()=>chrome.runtime.sendMessage({type:'clear-cache'}));
+ await worker.evaluate(()=>{qaFailNext=true;});
  await page.reload();await menu('sulsul-start');
  await worker.evaluate(async id=>{
   const deadline=Date.now()+10000;
@@ -74,12 +97,21 @@ try{
    await new Promise(resolve=>setTimeout(resolve,100));
   }
  },tabId);
- await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ assert.equal((await command('sulsul-state')).failed,true);
+ await page.waitForTimeout(250);
+ const errorBar=await barState();assert.equal(errorBar.alertVisible,true);assert.match(errorBar.alert,/테스트 연결 오류/);assert.equal(errorBar.action,'다시 시도');
+ assert.equal(errorBar.opacity,1,'errors stay readable without hovering');
+ await page.screenshot({path:path.join(scratch,'toolbar-error.png')});
+ await page.mouse.move(errorBar.main.x,errorBar.main.y);await page.waitForTimeout(250);
+ const retry=await barState();await page.mouse.click(retry.main.x,retry.main.y);
+ await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ assert.equal((await command('sulsul-state')).failed,false);assert.equal((await barState()).alertVisible,false);
+ console.log('PASS visible error alert and one-click retry without pausing first');
  await options.close();
  const openedSettings=context.waitForEvent('page');
- await menu('sulsul-settings');options=await openedSettings;
+ await worker.evaluate(()=>chrome.runtime.openOptionsPage());options=await openedSettings;
  await options.waitForURL('chrome-extension://'+extensionId+'/options.html');await waitStatus('선택한 AI로만');
- console.log('PASS Chrome context menu registration, start/resume, pause, restore, end, error retry, and settings routing');
+ console.log('PASS single direct translation menu, removed submenu, reader actions and error retry');
  await options.locator('#provider').selectOption('openai');
  assert.equal(await options.locator('#test').isDisabled(),true);
  assert.equal(await options.locator('#login').isVisible(),false);
