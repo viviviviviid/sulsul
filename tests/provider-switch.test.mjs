@@ -149,3 +149,30 @@ test('older installed hosts receive only one translation at a time',async()=>{
   await until(()=>w.calls.filter(c=>c.type==='translate').length===2);
   assert.equal(w.held.size,1);w.held.values().next().value();await b;
 });
+test('four slots cover multiple tabs and probes without dispatching canceled queued work',async()=>{
+  const w=worker(4);
+  for(const id of [1,2])await w.context.setReader(id,'https://example.com/page','running');
+  const jobs=[1,1,2,2].map((tabId,index)=>w.context.translate({...request,hold:true,before:String(index)},tabId,'https://example.com/page').catch(e=>e));
+  await until(()=>w.held.size===4);
+  const queued=w.context.translate({...request,hold:true,before:'queued'},1,'https://example.com/page').catch(e=>e);
+  const probe=w.context.testProvider();
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(w.calls.filter(c=>c.type==='translate').length,4);
+  assert.equal(w.calls.filter(c=>c.type==='provider-test').length,0);
+  await w.context.cancelTab(1);
+  for(const job of [jobs[0],jobs[1],queued])assert.match((await job).message,/중지/);
+  await until(()=>w.calls.some(c=>c.type==='provider-test'));
+  assert.equal(w.held.size,3,'other tab and probe survive');
+  for(const finish of [...w.held.values()])finish();
+  await Promise.all([...jobs,probe]);
+  assert.equal(w.calls.filter(c=>c.type==='translate').length,4);
+});
+test('provider change drains four active jobs and rejects queued jobs',async()=>{
+  const w=worker(4);await w.context.setReader(1,'https://example.com/page','running');
+  const jobs=Array.from({length:6},(_,index)=>w.context.translate({...request,hold:true,before:String(index)},1,'https://example.com/page').catch(e=>e));
+  await until(()=>w.held.size===4);
+  await w.context.saveProvider({provider:'openai'});
+  for(const result of await Promise.all(jobs))assert.match(result.message,/중지/);
+  assert.equal(w.calls.filter(c=>c.type==='translate').length,4);assert.equal(w.held.size,0);
+  assert(w.events.lastIndexOf('canceled-translation-finished')<w.events.indexOf('settings-save'));
+});

@@ -1,5 +1,6 @@
 (() => {
   if (globalThis.__sulsul) return;
+  const MAX_CONCURRENT_TRANSLATIONS = 4;
   // Mintlify renders prose paragraphs as direct spans, without p elements.
   const BLOCKS = 'h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,figcaption,blockquote,.mdx-content > span';
   const EXCLUDE = 'pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui]';
@@ -332,9 +333,9 @@
       dirty = true;
       while (true) {
         if (run !== token || mode !== 'running' || currentUrl !== pageUrl()) return;
-        // Keep references stable while either request is using this DOM snapshot.
+        // Keep references stable while requests are using this DOM snapshot.
         if (dirty && !inFlight.size) { dirty=false; collect(); displayCached(); measureVisible(stats); }
-        while (inFlight.size < 2) {
+        while (inFlight.size < MAX_CONCURRENT_TRANSLATIONS) {
           const current = nextBatch();
           if (!current.length) break;
           const page = { title:document.title.slice(0,500), url:location.origin+location.pathname, headings:records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.original).join('').slice(0,240)).slice(0,60), introduction:records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.original).join('')).join('\n').slice(0,2400) };
@@ -343,7 +344,7 @@
           for (const r of current) r.status='pending';
           const id = current[0].id, sent = performance.now();
           if (stats) { stats.requests++; stats.totalMs=null; }
-          // Resolve failures as values so the other in-flight response is always observed.
+          // Resolve failures as values so every in-flight response is observed.
           const task = send('translate',data).then(out => ({id,current,out,sent}),error => ({id,error}));
           inFlight.set(id,task);
         }

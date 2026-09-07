@@ -7,7 +7,7 @@ import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {encodeMessage,createDecoder} from '../host/core.mjs';
 
-test('native host runs two requests, cancels only the requested job, and guards settings writes',{timeout:15000},async()=>{
+test('native host runs four requests, cancels only the requested job, and guards settings writes',{timeout:15000},async()=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-concurrency-'));
   const held=new Map();
   const server=http.createServer(async(req,res)=>{
@@ -44,17 +44,23 @@ test('native host runs two requests, cancels only the requested job, and guards 
     res.end(JSON.stringify({done:true,done_reason:'stop',message:{content:JSON.stringify({blocks:data.blocks.map(b=>({id:b.id,parts:[{id:'t0',text:'이 문단을 읽어 보세요.'}]}))})}}));
   };
   try{
+    assert.equal((await rpc('capacity','settings-get')).result.maxConcurrentTranslations,4);
     const first=rpc('first','translate',input('b1'));
     const second=rpc('second','translate',input('b2'));
+    const third=rpc('third','translate',input('b3'));
+    const fourth=rpc('fourth','translate',input('b4'));
     const end=Date.now()+5000;
-    while(held.size!==2){if(Date.now()>end)assert.fail('both HTTP translations must be in flight');await new Promise(resolve=>setTimeout(resolve,5));}
-    const overflow=await rpc('overflow','translate',input('b3'));
-    assert.equal(overflow.ok,false);assert.match(overflow.error,/진행 중/);assert.equal(held.size,2);
+    while(held.size!==4){if(Date.now()>end)assert.fail('four HTTP translations must be in flight');await new Promise(resolve=>setTimeout(resolve,5));}
+    const overflow=await rpc('overflow','translate',input('b5'));
+    assert.equal(overflow.ok,false);assert.match(overflow.error,/진행 중/);assert.equal(held.size,4);
     const saving=await rpc('saving','settings-save',{provider:'ollama',model:'next',endpoint});
     assert.equal(saving.ok,false);assert.match(saving.error,/중지/);
     assert.equal((await rpc('cancel','cancel',{ids:['first']})).ok,true);
     const canceled=await first;assert.equal(canceled.ok,false);assert.match(canceled.error,/중지/);
     assert.equal(pending.has('second'),true,'other request remains pending after targeted cancel');
+    assert.equal(pending.has('third'),true);assert.equal(pending.has('fourth'),true);
+    release('b4');assert.equal((await fourth).result.blocks[0].id,'b4');
+    release('b3');assert.equal((await third).result.blocks[0].id,'b3');
     release('b2');
     const completed=await second;assert.equal(completed.ok,true);
     assert.equal(completed.result.blocks[0].id,'b2');

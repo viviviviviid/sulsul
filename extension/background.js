@@ -1,5 +1,6 @@
 const HOST = 'com.sulsul.gemini';
 const CACHE_VERSION = '5';
+const MAX_CONCURRENT_TRANSLATIONS = 4;
 let nativePort;
 let changingProvider = false;
 const pending = new Map();
@@ -122,7 +123,8 @@ function drainTranslations() {
 
 async function translationSettings() {
   const settings = await native('settings-get');
-  translationLimit = settings.maxConcurrentTranslations === 2 ? 2 : 1;
+  const capacity = settings.maxConcurrentTranslations;
+  translationLimit = Number.isInteger(capacity) && capacity > 0 ? Math.min(capacity,MAX_CONCURRENT_TRANSLATIONS) : 1;
   drainTranslations();
   return settings;
 }
