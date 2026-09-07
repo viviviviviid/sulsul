@@ -1,9 +1,14 @@
 name: CI
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
@@ -20,7 +25,10 @@ jobs:
         shell: pwsh
         run: ./install.ps1 -WithoutAntigravity -SkipRegister
       - run: npm test
-      - run: npx playwright install --with-deps chromium
+      - if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - if: runner.os == 'Windows'
+        run: npx playwright install chromium
       - run: npm run test:browser
       - if: runner.os == 'Windows'
         run: npm run package
