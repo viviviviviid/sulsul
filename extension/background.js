@@ -260,7 +260,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   else if (message.type === 'settings-save' && extensionPage) task = saveProvider(message.data);
   else if (message.type === 'provider-test' && extensionPage) task = testProvider();
   else if (message.type === 'ollama-models' && extensionPage) task = native('ollama-models',message.data);
-  else if (message.type === 'clear-cache' && extensionPage) task = cacheWrites.promise.catch(() => {}).then(() => { recentResults.clear(); return chrome.storage.local.clear(); });
+  else if (message.type === 'clear-cache' && extensionPage) task = cacheWrites.promise.catch(() => {}).then(async () => {
+    recentResults.clear();
+    const saved = await chrome.storage.local.get(null);
+    await chrome.storage.local.remove(Object.keys(saved).filter(key => key.startsWith('page:')));
+  });
   else return;
   task.then(result => reply({ ok: true, result })).catch(error => reply({ ok: false, error: error.message }));
   return true;

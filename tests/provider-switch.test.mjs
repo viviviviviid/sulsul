@@ -176,3 +176,9 @@ test('provider change drains four active jobs and rejects queued jobs',async()=>
   assert.equal(w.calls.filter(c=>c.type==='translate').length,4);assert.equal(w.held.size,0);
   assert(w.events.lastIndexOf('canceled-translation-finished')<w.events.indexOf('settings-save'));
 });
+test('clearing translation cache preserves the saved toolbar corner',async()=>{
+  const w=worker();
+  Object.assign(w.local,{'toolbar-corner':'top-left','page:test':{result:{blocks:[]}}});
+  const reply=await new Promise(resolve=>w.callbacks.message({type:'clear-cache'},{id:'test',url:'chrome-extension://test/options.html'},resolve));
+  assert.equal(reply.ok,true);assert.equal(w.local['toolbar-corner'],'top-left');assert.equal(w.local['page:test'],undefined);
+});

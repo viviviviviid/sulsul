@@ -13,6 +13,9 @@
   let knownParts = new WeakMap();
   let providerRevision = 'initial';
   let measurements = null;
+  const corners = new Set(['top-left','top-right','bottom-left','bottom-right']);
+  let toolbarCorner = 'bottom-right', cornerRevision = 0;
+  let cornerWrites = Promise.resolve();
   const shadowObservers = new Map();
 
   function state() { return { mode, waiting, busy, failed, translated, complete, total: records.length, skipped, message, measurements }; }
@@ -158,29 +161,102 @@
     return applied;
   }
 
+  function dockToolbar(corner, save = false) {
+    if (!corners.has(corner)) return;
+    toolbarCorner = corner;
+    if (toolbar) toolbar.dataset.corner = corner;
+    if (save) {
+      cornerRevision++;
+      cornerWrites = cornerWrites.catch(() => {}).then(() => chrome.storage.local.set({'toolbar-corner':corner})).catch(() => {});
+    }
+  }
+
+  function enableToolbarDrag(bar, section) {
+    let drag = null, suppressClick = false;
+    const finishDrag = (event, canceled = false) => {
+      if (!drag || (event?.pointerId !== undefined && event.pointerId !== drag.id)) return;
+      const previous = drag; drag = null;
+      if (canceled) suppressClick = true;
+      if (previous.moved) {
+        suppressClick = true;
+        const corner = canceled ? previous.corner : `${event.clientY < innerHeight/2 ? 'top' : 'bottom'}-${event.clientX < innerWidth/2 ? 'left' : 'right'}`;
+        dockToolbar(corner,!canceled);
+      }
+      bar.removeAttribute('data-dragging');
+      for (const name of ['--drag-left','--drag-top','--drag-width']) bar.style.removeProperty(name);
+      if (previous.capture.hasPointerCapture(previous.id)) previous.capture.releasePointerCapture(previous.id);
+    };
+    bar._cancelDrag = () => finishDrag(null,true);
+    section.addEventListener('pointerdown',event => {
+      if (event.button !== 0 || !event.isPrimary || drag) return;
+      suppressClick = false;
+      cornerRevision++;
+      const capture=event.target.closest('button') || section;
+      drag = {id:event.pointerId,x:event.clientX,y:event.clientY,corner:toolbarCorner,moved:false,capture};
+      capture.setPointerCapture(event.pointerId);
+    });
+    section.addEventListener('pointermove',event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      if (!drag.moved) {
+        if (Math.hypot(event.clientX-drag.x,event.clientY-drag.y) < 6) return;
+        const box=bar.getBoundingClientRect();
+        drag.moved=true; drag.offsetX=drag.x-box.left; drag.offsetY=drag.y-box.top; drag.width=box.width; drag.height=box.height;
+        bar.style.setProperty('--drag-width',`${box.width}px`);
+        bar.setAttribute('data-dragging','');
+      }
+      event.preventDefault();
+      const x=Math.max(0,Math.min(innerWidth-drag.width,event.clientX-drag.offsetX));
+      const y=Math.max(0,Math.min(innerHeight-drag.height,event.clientY-drag.offsetY));
+      bar.style.setProperty('--drag-left',`${x}px`); bar.style.setProperty('--drag-top',`${y}px`);
+    });
+    section.addEventListener('pointerup',event => finishDrag(event));
+    section.addEventListener('pointercancel',event => finishDrag(event,true));
+    section.addEventListener('lostpointercapture',event => finishDrag(event,true));
+    section.addEventListener('keydown',event => {
+      if (event.key === 'Escape' && drag) { event.preventDefault(); event.stopPropagation(); finishDrag(null,true); }
+    });
+    // Keyboard clicks have detail 0. A new pointerdown re-enables ordinary clicks.
+    section.addEventListener('click',event => {
+      if (suppressClick && event.detail !== 0) { event.preventDefault(); event.stopImmediatePropagation(); }
+    },true);
+  }
+
   function notify(text = message) {
     message = text;
     if (mode === 'off') { publish(); return; }
     if (!toolbar?.isConnected) {
       toolbar = document.createElement('div');
       toolbar.dataset.sulsulUi = '';
+      dockToolbar(toolbarCorner);
       const shadow = toolbar.attachShadow({ mode: 'closed' });
       const style = document.createElement('style');
       style.textContent = `
         :host{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;font:12px/1.5 system-ui,-apple-system,"Malgun Gothic",sans-serif!important;color:#263e32!important}
+        :host([data-corner^="top"]){top:20px!important;bottom:auto!important}
+        :host([data-corner$="left"]){left:16px!important;right:auto!important}
+        :host([data-corner$="left"]) section{flex-direction:row-reverse}
+        :host([data-dragging]){left:var(--drag-left)!important;top:var(--drag-top)!important;right:auto!important;bottom:auto!important;width:var(--drag-width)!important}
+        :host([data-dragging]) section{opacity:1}
+        :host([data-dragging]) section,:host([data-dragging]) button{cursor:grabbing}
+        :host([data-dragging]) .alert{visibility:hidden}
         *{box-sizing:border-box}
         section{display:flex;align-items:center;padding:5px;border:1px solid #d9e1d8;border-radius:12px;background:#fffffced;opacity:.58;backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);box-shadow:0 2px 12px #122d220d;transition:opacity .18s,box-shadow .18s}
+        section{touch-action:none;user-select:none;cursor:grab}
         button{border:0;border-radius:7px;padding:8px 12px;cursor:pointer;font:inherit;white-space:nowrap;background:#eaf2e9;color:#245b40;transition:background .18s,color .18s}
-        button.main{min-width:92px}
+        button.main{min-width:92px;cursor:grab}
         button.extra{max-width:0;padding:8px 0;opacity:0;visibility:hidden;overflow:hidden;background:transparent;color:#657467;transition:max-width .18s,padding .18s,opacity .18s,visibility .18s}
         section:hover,section:focus-within,section[data-error]{opacity:1;box-shadow:0 3px 18px #122d2220}
-        section:hover button.extra,section:focus-within button.extra{max-width:90px;padding:8px 12px;opacity:1;visibility:visible}
+        section:hover button.extra,section:focus-within button.extra,:host([data-dragging]) button.extra{max-width:90px;padding:8px 12px;opacity:1;visibility:visible}
         .action-text{display:none}.state-text{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
-        section:hover .action-text,section:focus-within .action-text{display:inline}
-        section:hover .state-text,section:focus-within .state-text{display:none}
+        section:hover .action-text,section:focus-within .action-text,:host([data-dragging]) .action-text{display:inline}
+        section:hover .state-text,section:focus-within .state-text,:host([data-dragging]) .state-text{display:none}
         section[data-error] .main{background:#fff0e7;color:#93421f}
         .alert{position:absolute;right:0;bottom:calc(100% + 10px);width:min(320px,calc(100vw - 32px));padding:13px 15px;border:1px solid #e8c7b5;border-radius:12px;background:#fffaf5;color:#78391f;font-size:12px;line-height:1.65;box-shadow:0 5px 24px #39200f1a;overflow-wrap:anywhere;white-space:pre-line}
         .alert::after{content:'';position:absolute;bottom:-6px;right:24px;width:10px;height:10px;background:#fffaf5;border-right:1px solid #e8c7b5;border-bottom:1px solid #e8c7b5;transform:rotate(45deg)}
+        :host([data-corner$="left"]) .alert{left:0;right:auto}
+        :host([data-corner$="left"]) .alert::after{left:24px;right:auto}
+        :host([data-corner^="top"]) .alert{top:calc(100% + 10px);bottom:auto}
+        :host([data-corner^="top"]) .alert::after{top:-6px;bottom:auto;transform:rotate(225deg)}
         [hidden]{display:none!important}
         section button:hover{background:#dcebd9}section button.end:hover,section button.original:hover{background:#eef0e9}
         button:focus-visible{outline:2px solid #245b40;outline-offset:2px}
@@ -198,6 +274,7 @@
       section.append(original,end,action,label); shadow.append(style,alert,section);
       toolbar._label = label; toolbar._original = original; toolbar._action = action; toolbar._end = end;
       toolbar._section=section; toolbar._alert=alert; toolbar._stateText=stateText; toolbar._actionText=actionText;
+      enableToolbarDrag(toolbar,section);
       document.documentElement.append(toolbar);
     }
     toolbar._label.textContent = failed ? '' : message;
@@ -208,7 +285,7 @@
     toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
     toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
-    toolbar._action.title = message;
+    toolbar._action.title = message+'\n드래그해서 화면 모서리로 이동';
     publish();
   }
 
@@ -443,9 +520,9 @@
   // attachShadow itself emits no document mutation; a slow sweep also finds late components.
   setInterval(requestScan, 3000);
   window.addEventListener('scroll', requestScan, { passive:true, capture:true });
-  window.addEventListener('resize', requestScan, { passive:true });
+  window.addEventListener('resize', () => { toolbar?._cancelDrag(); requestScan(); }, { passive:true });
   window.addEventListener('popstate', navigate);
-  window.addEventListener('pagehide', () => { control++; interrupt(); });
+  window.addEventListener('pagehide', () => { toolbar?._cancelDrag(); control++; interrupt(); });
   async function synchronize() {
     const revision = control;
     try {
@@ -461,5 +538,9 @@
   }
   window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); });
   globalThis.__sulsul = { state };
+  const initialCornerRevision = cornerRevision;
+  chrome.storage.local.get('toolbar-corner').then(saved => {
+    if (cornerRevision === initialCornerRevision) dockToolbar(saved['toolbar-corner']);
+  }).catch(() => {});
   synchronize();
 })();

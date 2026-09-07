@@ -51,7 +51,10 @@ try{
   const bar=document.querySelector('[data-sulsul-ui]');
   const buttons=[bar._original,bar._end,bar._action];
   const rect=bar._action.getBoundingClientRect();
+  const box=bar.getBoundingClientRect(), alertBox=bar._alert.getBoundingClientRect();
   return {visible:buttons.filter(b=>getComputedStyle(b).visibility!=='hidden'&&b.getBoundingClientRect().width>0).length,
+   corner:bar.dataset.corner,dragging:bar.hasAttribute('data-dragging'),box:{x:box.x,y:box.y,right:box.right,bottom:box.bottom},
+   alertBox:{x:alertBox.x,y:alertBox.y,right:alertBox.right,bottom:alertBox.bottom},
    opacity:Number(getComputedStyle(bar._section).opacity),width:bar.getBoundingClientRect().width,
    alertVisible:!bar._alert.hidden,alert:bar._alert.textContent,status:bar._stateText.textContent,action:bar._actionText.textContent,
    main:{x:rect.x+rect.width/2,y:rect.y+rect.height/2}};
@@ -77,6 +80,35 @@ try{
  await page.waitForTimeout(250);assert.equal((await barState()).visible,3,'keyboard focus reveals controls');
  await page.mouse.click(10,10);
  console.log('PASS compact status, hover expansion, full opacity and keyboard access');
+ const dragTo=async(x,y)=>{
+  let p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.waitForTimeout(250);
+  p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.mouse.down();
+  await page.mouse.move(x,y,{steps:12});
+  assert.equal((await barState()).dragging,true,'toolbar follows pointer before release');
+  await page.mouse.up();await page.mouse.click(640,350);await page.waitForTimeout(250);
+ };
+ const assertCorner=async corner=>{
+  const s=await barState(),{width,height}=page.viewportSize();assert.equal(s.corner,corner);assert.equal(s.dragging,false);
+  assert.ok(s.box.x>=0&&s.box.y>=0&&s.box.right<=width&&s.box.bottom<=height);
+  assert.ok(Math.abs((corner.endsWith('left')?s.box.x:width-s.box.right)-16)<1);
+  assert.ok(Math.abs((corner.startsWith('top')?s.box.y:height-s.box.bottom)-20)<1);
+  assert.equal((await command('sulsul-state')).mode,'running','drag never pauses or ends translation');
+ };
+ for(const [corner,x,y] of [['top-left',40,40],['top-right',1240,40],['bottom-left',40,680],['bottom-right',1240,680]]){
+  await dragTo(x,y);await assertCorner(corner);
+ }
+ await dragTo(580,320);await assertCorner('top-left'); // Drop near the middle still snaps to a corner.
+ // Escape cancels a move without changing the saved corner or activating a button.
+ let p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.waitForTimeout(250);p=(await barState()).main;
+ await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(900,500,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();
+ await assertCorner('top-left');
+ await page.reload();await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('antigravity 한국어'));
+ await assertCorner('top-left');
+ await page.setViewportSize({width:375,height:720});await page.waitForTimeout(250);await assertCorner('top-left');
+ await page.locator('[data-sulsul-ui]').hover();await page.waitForTimeout(250);await assertCorner('top-left');
+ await page.screenshot({path:path.join(scratch,'toolbar-top-left-narrow.png')});
+ await page.setViewportSize({width:1280,height:720});
+ console.log('PASS dragging to all four corners, middle snap, click suppression, Escape, persisted position and narrow screens');
  await menu('sulsul-start');assert.equal((await command('sulsul-state')).mode,'running');
  await command('sulsul-stop');assert.equal((await command('sulsul-state')).mode,'paused');
  assert.match(await page.locator('h1').innerText(),/^antigravity 한국어/);
@@ -101,6 +133,8 @@ try{
  await page.waitForTimeout(250);
  const errorBar=await barState();assert.equal(errorBar.alertVisible,true);assert.match(errorBar.alert,/테스트 연결 오류/);assert.equal(errorBar.action,'다시 시도');
  assert.equal(errorBar.opacity,1,'errors stay readable without hovering');
+ assert.equal(errorBar.corner,'top-left');assert.ok(errorBar.alertBox.y>errorBar.box.bottom,'top-docked errors open downward');
+ assert.ok(errorBar.alertBox.x>=0&&errorBar.alertBox.right<=1280);
  await page.screenshot({path:path.join(scratch,'toolbar-error.png')});
  await page.mouse.move(errorBar.main.x,errorBar.main.y);await page.waitForTimeout(250);
  const retry=await barState();await page.mouse.click(retry.main.x,retry.main.y);
