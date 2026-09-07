@@ -26,7 +26,12 @@ process.stdin.on('data',data=>{
 `);
   const session=new LoginSession({cli:process.execPath,profile:root,workspace:root},verify,{spawn:(file,args,opts)=>pty.spawn(file,[script],opts),timeoutMs});
   await session.start();
-  return {session,dispose(){session.cancel();fs.rmSync(root,{recursive:true,force:true});}};
+  return {session,async dispose(){
+    session.cancel();
+    // ConPTY closes handles asynchronously; retry cleanup while Windows releases
+    // the process working directory instead of deleting it synchronously.
+    await fs.promises.rm(root,{recursive:true,force:true,maxRetries:15,retryDelay:100});
+  }};
 }
 test('real background PTY accepts a code, exits, and reports connected only after verification',{timeout:10000},async()=>{
   let finish;const verified=new Promise(resolve=>{finish=resolve;});let calls=0;
@@ -39,15 +44,15 @@ test('real background PTY accepts a code, exits, and reports connected only afte
     assert.equal(f.session.pty,null);assert.equal(calls,1);assert.equal(f.session.snapshot().url,undefined);
     assert.equal(JSON.stringify(f.session.snapshot()).includes('valid-test-code'),false);
     finish();await until(()=>f.session.state==='connected');assert.equal(f.session.active,false);
-  }finally{finish();f.dispose();}
+  }finally{finish();await f.dispose();}
 });
-test('invalid authentication and cancellation never report connected',{timeout:10000},async()=>{
+test('invalid authentication and cancellation never report connected',{timeout:20000},async()=>{
   let verified=false;const f=await fixture(async()=>{verified=true;});
-  try{await until(()=>f.session.state==='waiting');f.session.submit('invalid-test-code');await until(()=>f.session.state==='failed');assert.equal(verified,false);assert.equal(f.session.pty,null);}finally{f.dispose();}
+  try{await until(()=>f.session.state==='waiting');f.session.submit('invalid-test-code');await until(()=>f.session.state==='failed');assert.equal(verified,false);assert.equal(f.session.pty,null);}finally{await f.dispose();}
   const g=await fixture(async()=>{});
-  try{await until(()=>g.session.state==='waiting');assert.equal(g.session.cancel().state,'canceled');assert.equal(g.session.pty,null);assert.throws(()=>g.session.submit('valid-test-code'));}finally{g.dispose();}
+  try{await until(()=>g.session.state==='waiting');assert.equal(g.session.cancel().state,'canceled');assert.equal(g.session.pty,null);assert.throws(()=>g.session.submit('valid-test-code'));}finally{await g.dispose();}
 });
 test('login timeout closes the background process',{timeout:10000},async()=>{
   const f=await fixture(async()=>{},400);
-  try{await until(()=>f.session.state==='failed');assert.match(f.session.snapshot().message,/시간/);assert.equal(f.session.pty,null);}finally{f.dispose();}
+  try{await until(()=>f.session.state==='failed');assert.match(f.session.snapshot().message,/시간/);assert.equal(f.session.pty,null);}finally{await f.dispose();}
 });

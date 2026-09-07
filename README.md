@@ -21,7 +21,7 @@
 
 ## macOS에서 시작하기
 
-**macOS 13.5 이상인 Apple Silicon Mac은 Releases의 `Sulsul-Mac-arm64-0.7.0.zip`을 받아 `술술 설치.app`을 여세요.** Node.js와 개발 도구를 따로 설치할 필요가 없습니다. 설치 앱에서 Chrome 확장을 추가할 폴더를 안내합니다. 초기 배포에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다.
+**macOS 13.5 이상인 Apple Silicon Mac은 Releases의 `Sulsul-Mac-arm64-0.7.1.zip`을 받아 `술술 설치.app`을 여세요.** Node.js와 개발 도구를 따로 설치할 필요가 없습니다. 설치 앱에서 Chrome 확장을 추가할 폴더를 안내합니다. 초기 배포에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다.
 
 Google 계정 연결은 술술 화면에서 로그인 페이지를 열고 인증 코드를 붙여넣으면 됩니다. 로그인·번역 중 터미널 창은 열리지 않습니다.
 
