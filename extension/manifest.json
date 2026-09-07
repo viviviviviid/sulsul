@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "술술 — 웹을 편하게",
+  "description": "내가 선택한 AI로 웹페이지·게시글·댓글을 쉬운 한국어로 바꿉니다. 새로 나타나는 내용도 읽던 자리에서 번역합니다.",
+  "version": "0.6.0",
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "술술 · 쉽게 읽기"
+  },
+  "commands": {
+    "toggle-reading": {
+      "suggested_key": {
+        "default": "Alt+Shift+K"
+      },
+      "description": "쉽게 읽기 / 일시중지 / 이어 읽기"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwTJmGlvgMUpxBTXBOaefsehiFU/klpbmxW6zhPCug5eZ4LEGWMlvmoFMJvx9nF3ccDRPITjIrEpZgt41fDXXQ72k+0bEeRKMU/j0YpJNH/Hm0QLn3D5hGUQjYC2MSF0KsOyUb8KztwQ5SPWZ6u79I8eXfhwT7yrLghAEKCiJt7ziDJphKhCLnKMHsfoOPK0Xu9e9Lotdh5auYui1MyXUmbZMtX/U9eZua4QcDg2VBZhK1wzQvJ5yiDlJjilsspxuNWbeWs9UUBjAOAVaYqPplKP7nDsztbVZWnLfO+1WpEANp6H8K/PQMWZERyotSEpvh2JCQNbHpeWJ5THqVPHBJQIDAQAB"
+}

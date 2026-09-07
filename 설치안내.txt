@@ -1,0 +1,55 @@
+﻿술술 0.6.0 — Windows에서 시작하기
+
+1. Node.js 공식 사이트 https://nodejs.org/en/download 에서 LTS를 설치합니다.
+2. ZIP을 보관할 폴더에 풉니다. ZIP 안에서 바로 실행하지 마세요.
+3. install.cmd를 더블클릭합니다. 관리자 권한은 필요하지 않습니다.
+   1: Google 계정으로 연결 → 공식 Antigravity CLI를 내려받습니다.
+   2: API 키 또는 Ollama로 연결 → Antigravity 다운로드를 생략합니다.
+4. Chrome 주소창에 chrome://extensions 입력 → 개발자 모드 켜기 →
+   '압축해제된 확장 프로그램을 로드합니다' → 이 폴더 안의 extension 선택.
+5. 술술 팝업 → AI 선택 · 설정 → AI와 모델 선택 → 저장.
+   Google: Google 계정 연결을 누르고 공식 로그인 진행. 완료 후 터미널에 /quit 입력.
+   API: 본인의 API 키를 입력. ChatGPT/Google AI/Claude 구독과 API 요금은 별도입니다.
+   Ollama: https://ollama.com/download 에서 설치·실행하고 로컬 모델을 내려받은 뒤
+   '설치한 모델 불러오기'로 선택. 클라우드 모델은 술술에서 지원하지 않습니다.
+6. '연결 테스트'로 짧은 예문 번역 확인. API 선택 시 사용량에 포함됩니다.
+7. 읽을 웹페이지에서 술술 → 쉽게 읽기. 단축키: Alt + Shift + K.
+
+다음부터 PC를 껐다 켜도 터미널을 직접 실행할 필요는 없습니다.
+Google 로그인이 만료되거나 취소됐다면 Google 계정 연결을 다시 진행하세요.
+한도는 AI 제공자가 정합니다. 한도 초과 시 다른 AI로 자동 전환하지 않습니다.
+
+원문: 원문으로 되돌리고 일시중지. 일시중지: 지금 번역된 화면 유지.
+종료: 원문으로 되돌리고 자동 읽기 종료.
+같은 탭·같은 출처에서 다음 페이지와 새로 나타난 댓글도 자동으로 번역합니다.
+
+업데이트
+- Chrome에서 술술을 종료하고 브라우저를 닫습니다.
+- 새 버전의 extension, host 소스와 설치 파일을 기존 술술 폴더에 덮어씁니다.
+- data 폴더와 기존 host/config.json은 유지합니다.
+- install.cmd 실행 → Chrome 확장 목록에서 술술 새로고침 → 읽던 페이지 새로고침.
+- 다른 폴더에 새로 설치하면 키 입력·연결이 다시 필요할 수 있습니다.
+
+문제 해결
+- 연결 프로그램을 찾지 못함: install.cmd 재실행. 폴더 이동 후에도 재실행하세요.
+- Node.js를 못 찾음: Node.js LTS 설치 후 설치 창을 닫았다가 다시 실행하세요.
+- API 인증 오류: AI 설정에서 올바른 키와 모델을 저장하고 연결 테스트.
+- 모델 요청 형식 오류: 구조화 JSON 출력을 지원하는 모델을 선택하세요.
+- Ollama 연결 오류: Ollama 실행 및 모델 다운로드 여부 확인. localhost 주소만 지원.
+- 일부만 번역됨: PDF·이미지·iframe·입력창은 제외됩니다. 댓글을 펼친 후 기다리세요.
+- AI 설정 파일 오류: 브라우저를 닫고 host/config.json의 providerSettings 경로에 있는
+  providers.json을 providers.backup.json으로 이름 변경한 뒤 설정을 다시 저장하세요.
+  0.5 이전 설치에는 providerSettings가 없을 수 있습니다. profile 경로의 providers.json입니다.
+- API 키 암호 해제 오류: 다른 Windows 계정/PC의 암호 파일을 옮겼다면 키를 다시 입력하세요.
+
+삭제
+uninstall.cmd 실행 → Chrome에서 확장 프로그램 삭제.
+연결 등록만 제거하며 로그인 프로필과 암호화한 키 파일은 남습니다.
+완전히 지우려면 Antigravity 공식 로그아웃 후 술술 설치 폴더를 삭제하세요.
+오래된 개인 설치는 host/config.json의 profile 경로가 폴더 밖일 수 있습니다.
+Chrome의 확장 제거는 확장에 저장된 번역 캐시도 제거합니다.
+
+다른 사람에게 전달
+원본 다운로드 ZIP 또는 npm run package로 만든 ZIP만 보내세요.
+설치 후 생긴 data, host/config.json, providers.json, 로그인 정보를 함께 보내지 마세요.
+각자가 본인의 계정 또는 API 키를 연결해야 합니다.

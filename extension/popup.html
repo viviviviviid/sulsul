@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="popup.css"><title>술술</title></head>
+<body>
+  <header><div class="wordmark">술술<span class="dot"></span></div><span class="edition">나의 웹 번역기</span></header>
+  <main>
+    <div class="eyebrow">WORDS, MADE CLEAR.</div>
+    <h1>읽던 자리에서,<br>편안한 한국어로.</h1>
+    <p class="description">게시글부터 댓글까지,<br>읽던 자리에서 쉽게 읽어요.</p>
+    <div class="page"><span class="page-icon">↳</span><span id="page-title">현재 페이지 확인 중</span></div>
+    <button class="primary" id="translate" disabled><span id="button-text">문서 확인 중</span><span>↗</span></button>
+    <div class="sub-actions"><button id="restore" hidden>원문 보기</button><button id="end" hidden>종료</button><span class="shortcut">Alt + Shift + K</span></div>
+    <p class="auto-hint">한 번 켜면 이 탭의 같은 사이트에서 자동으로 이어 읽어요.</p>
+    <div id="progress" role="status" aria-live="polite"></div>
+    <div class="connection"><span id="connection-dot" class="status-dot"></span><span id="connection-text">AI 연결 확인 중</span></div>
+    <a href="options.html" target="_blank">AI 선택 · 설정 ↗</a>
+    <button id="login" class="secondary" hidden>Google 계정 연결</button>
+    <a id="setup" href="setup.html" target="_blank" hidden>처음 설치하는 방법 보기 ↗</a>
+  </main>
+  <footer><span id="model-name">내가 선택한 AI로</span><button id="clear-cache" title="이 PC에 저장한 번역 결과 지우기">저장된 번역 지우기</button></footer>
+  <script src="popup.js"></script>
+</body></html>

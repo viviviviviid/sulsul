@@ -1,0 +1,41 @@
+name: Draft release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Check tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and package version must match.' }
+      - run: npm run check
+      - shell: pwsh
+        run: ./install.ps1 -WithoutAntigravity -SkipRegister
+      - run: npm test
+      - run: npx playwright install chromium
+      - run: npm run test:browser
+      - run: npm run package
+      - run: npm run package:source
+      - name: Attach files to draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @(Get-ChildItem -LiteralPath dist -Filter '*.zip' -File)
+          $checksums = $files | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
+          $checksums | Set-Content -LiteralPath dist/SHA256SUMS.txt -Encoding ascii
+          gh release create $env:GITHUB_REF_NAME $files.FullName dist/SHA256SUMS.txt --verify-tag --draft --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed.' }

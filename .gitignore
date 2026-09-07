@@ -1,0 +1,23 @@
+# Generated local installation and private account data
+/data/
+/host/config.json
+/host/node-path.txt
+/host/com.sulsul.gemini.json
+/host/*.exe
+**/providers.json*
+**/verified.json
+**/.gemini/
+**/.env
+**/.env.*
+*.pem
+*.key
+*.pfx
+*.log
+node_modules/
+dist/
+.build/
+test-results/
+playwright-report/
+.DS_Store
+Thumbs.db
+
