@@ -53,7 +53,7 @@ test('provider and model scopes prevent reusing a previous AI cache',async()=>{
 });
 test('webpage content scripts cannot read or change keys, login, or run probes',()=>{
   const w=worker(),sender={id:'test',url:'https://example.com/page',tab:{id:7}};
-  for(const type of ['settings-get','settings-save','provider-test','ollama-models','login','health'])assert.equal(w.callbacks.message({type,data:{apiKey:'fake'}},sender,()=>assert.fail('privileged webpage reply')),undefined);
+  for(const type of ['settings-get','settings-save','provider-test','ollama-models','login','login-status','login-code','login-cancel','health'])assert.equal(w.callbacks.message({type,data:{apiKey:'fake'}},sender,()=>assert.fail('privileged webpage reply')),undefined);
   assert.equal(w.calls.length,0);
 });
 
@@ -125,13 +125,15 @@ test('cache storage errors preserve successful translation and release the queue
 });
 test('connection tests share translation slots and are not canceled by another tab',async()=>{
   const w=worker();await w.context.setReader(1,'https://example.com/page','running');
-  const a=w.context.translate({...request,hold:true},1,'https://example.com/page');
-  const b=w.context.translate({...request,hold:true},1,'https://example.com/page').catch(e=>e);
+  const a=w.context.translate({...request,hold:true,before:'first'},1,'https://example.com/page');
+  const b=w.context.translate({...request,hold:true,before:'second'},1,'https://example.com/page').catch(e=>e);
   await until(()=>w.held.size===2);
   const probe=w.context.testProvider();
   await new Promise(r=>setTimeout(r,20));
   assert.equal(w.calls.filter(c=>c.type==='provider-test').length,0);
-  w.held.values().next().value();await a;
+  // Asynchronous hashing can dispatch the second caller before the first.
+  const first=w.calls.find(call=>call.type==='translate'&&call.data.before==='first');
+  w.held.get(first.id)();await a;
   await until(()=>w.calls.some(c=>c.type==='provider-test'));
   assert.equal(w.held.size,2);
   await w.context.cancelTab(1);assert.match((await b).message,/중지/);

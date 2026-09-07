@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
       - run: npm test
       - if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium
-      - if: runner.os == 'Windows'
+      - if: runner.os != 'Linux'
         run: npx playwright install chromium
       - run: npm run test:browser
       - if: runner.os == 'Windows'

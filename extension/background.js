@@ -256,6 +256,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   else if (message.type === 'cancel' && tabId !== undefined) task = cancelTab(tabId);
   else if (message.type === 'health' && extensionPage) task = native('health');
   else if (message.type === 'login' && extensionPage) task = native('login');
+  else if (['login-status','login-code','login-cancel'].includes(message.type) && extensionPage) task = native(message.type,message.data);
   else if (message.type === 'settings-get' && extensionPage) task = native('settings-get');
   else if (message.type === 'settings-save' && extensionPage) task = saveProvider(message.data);
   else if (message.type === 'provider-test' && extensionPage) task = testProvider();

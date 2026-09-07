@@ -4,7 +4,7 @@
 
 ## Antigravity
 
-설치 시 Google 계정 연결을 선택하세요. 확장의 Google 계정 연결로 공식 로그인 후 CLI 입력 화면에서 `/quit`을 입력합니다. 기본 모델은 `gemini-3.8-flash-low`입니다. JSON 형식이 맞지 않는 경우에만 Medium으로 한 번 재처리합니다.
+설치 시 Google 계정 연결을 선택하세요. 확장의 Google 계정 연결에서 공식 Google 로그인 페이지를 열고, 표시되는 인증 코드를 술술 화면에 붙여넣습니다. 터미널 창은 열리지 않습니다. 로그인 후 짧은 예문을 한 번 번역해 연결을 확인합니다. 기본 모델은 `gemini-3.8-flash-low`입니다. JSON 형식이 맞지 않는 경우에만 Medium으로 한 번 재처리합니다.
 
 추가 크레딧·API 키 방식으로 전환하지 않습니다. 계정의 이용 자격과 한도는 Google이 결정합니다. [공식 설치](https://antigravity.google/docs/cli/install), [요금제](https://antigravity.google/docs/plans/), [크레딧 설정](https://antigravity.google/docs/cli/credits/).
 

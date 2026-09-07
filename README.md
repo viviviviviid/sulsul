@@ -21,6 +21,12 @@
 
 ## macOS에서 시작하기
 
+**macOS 13.5 이상인 Apple Silicon Mac은 Releases의 `Sulsul-Mac-arm64-0.7.0.zip`을 받아 `술술 설치.app`을 여세요.** Node.js와 개발 도구를 따로 설치할 필요가 없습니다. 설치 앱에서 Chrome 확장을 추가할 폴더를 안내합니다. 초기 배포에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다.
+
+Google 계정 연결은 술술 화면에서 로그인 페이지를 열고 인증 코드를 붙여넣으면 됩니다. 로그인·번역 중 터미널 창은 열리지 않습니다.
+
+아래는 소스에서 직접 설치하는 개발자용 절차입니다. 먼저 `npm ci`를 실행하세요.
+
 Node.js 22 이상과 Apple Command Line Tools가 필요합니다. Command Line Tools가 없다면 터미널에서 `xcode-select --install`로 설치하세요. 술술 폴더에서 다음 명령을 실행합니다.
 
 ```sh
@@ -77,13 +83,15 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Node.js 22 이상, 권장 LTS 24입니다. 프로덕션 런타임에는 외부 npm 패키지가 필요하지 않습니다. Playwright는 개발·테스트에만 사용합니다.
+Node.js 22 이상, 권장 LTS 24입니다. 로그인용 가상 터미널은 `node-pty`를 사용하며 Mac 설치 앱과 Windows 배포 ZIP에 포함됩니다. Playwright는 개발·테스트에만 사용합니다.
 
 Windows 배포 파일과 소스 ZIP은 다음 명령으로 만듭니다. 허용 목록의 파일만 복사하여 설치 기록·계정·키가 섞이지 않게 합니다.
 
 ```sh
 npm run package
 npm run package:source
+npm run package:extension
+# macOS에서 실행: npm run package:macos
 ```
 
 결과는 `dist/`에 생성됩니다. [기여 가이드](CONTRIBUTING.md), [구조 설명](docs/architecture.md), [GitHub 공개·릴리스 가이드](docs/publishing.md).

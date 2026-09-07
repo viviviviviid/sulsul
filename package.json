@@ -1,6 +1,6 @@
 {
   "name": "sulsul",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Read the web in clear, natural Korean with your choice of AI.",
   "license": "MIT",
   "private": true,
@@ -13,9 +13,15 @@
     "check": "node scripts/check.mjs",
     "package": "node scripts/package.mjs",
     "package:source": "node scripts/package.mjs --source",
-    "test:browser": "node tests/browser/general-web.mjs && node tests/browser/auto-navigation.mjs && node tests/browser/settings.mjs"
+    "test:browser": "node tests/browser/general-web.mjs && node tests/browser/auto-navigation.mjs && node tests/browser/settings.mjs",
+    "package:macos": "node scripts/package-macos.mjs",
+    "package:extension": "node scripts/package.mjs --extension",
+    "postinstall": "node scripts/prepare-pty.mjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"
+  },
+  "dependencies": {
+    "node-pty": "1.1.0"
   }
 }

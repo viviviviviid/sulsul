@@ -25,7 +25,10 @@ native=async(type,data,tabId,sourceUrl)=>{
  }
  if(type==='provider-test'){qaTests++;return {message:'연결 성공 · 편하게 읽어요.'};}
  if(type==='ollama-models')return ['local-model:8b','other-model:latest'];
- if(type==='login')return {message:'Google 로그인 창을 열었습니다.'};
+ if(type==='login')return {sessionId:'test-login',state:'waiting',url:'https://accounts.google.com/o/oauth2/auth?test=1',message:'인증 코드를 붙여넣어 주세요.'};
+ if(type==='login-status')return {sessionId:'test-login',state:'waiting',url:'https://accounts.google.com/o/oauth2/auth?test=1',message:'인증 코드를 붙여넣어 주세요.'};
+ if(type==='login-code')return {sessionId:'test-login',state:'connected',message:'Google 계정을 연결했어요.'};
+ if(type==='login-cancel')return {sessionId:'test-login',state:'canceled',message:'계정 연결을 취소했어요.'};
  if(type==='translate'){
   if(qaFailNext){qaFailNext=false;throw new Error('일시적인 테스트 연결 오류');}
   qaRequests.push({provider:qaSettings.selected,model:qaSettings.providers[qaSettings.selected].model});
@@ -41,6 +44,13 @@ const extensionId=new URL(worker.url()).host;
 let options=await context.newPage();
 const waitStatus=text=>options.waitForFunction(text=>document.querySelector('#status').textContent.includes(text),text);
 try{
+ const login=await context.newPage();await login.goto('chrome-extension://'+extensionId+'/login.html');
+ await login.locator('#google').waitFor({state:'visible'});assert.match(await login.locator('#google').getAttribute('href'),/^https:\/\/accounts\.google\.com\//);
+ await login.locator('#code').fill('fake-auth-code');await login.locator('#connect').click();
+ await login.locator('#done').waitFor({state:'visible'});assert.equal(await login.locator('#code').inputValue(),'');
+ await login.reload();await login.locator('#google').waitFor({state:'visible'});await login.locator('#cancel').click();
+ await login.locator('#retry').waitFor({state:'visible'});assert.match(await login.locator('#status').innerText(),/취소/);
+ await login.close();console.log('PASS Google login page, code clearing, connected state and cancellation');
  await options.goto('chrome-extension://'+extensionId+'/options.html');await waitStatus('선택한 AI로만');
  assert.equal(await options.locator('#provider option').count(),5);
  assert.equal(await options.locator('#provider').inputValue(),'antigravity');

@@ -1,4 +1,11 @@
-﻿술술 0.6.1 — Windows에서 시작하기
+﻿술술 0.7.0 — 시작하기
+
+Apple Silicon Mac (macOS 13.5 이상)
+Sulsul-Mac-arm64-0.7.0.zip을 풀고 술술 설치.app을 실행하세요.
+Node.js나 개발 도구는 별도 설치하지 않습니다. 설치 창의 Chrome 확장 추가 안내를 따르세요.
+Apple 개발자 서명·공증이 없는 초기 배포입니다. 실행 차단 시 시스템 설정의 개인정보 보호 및 보안에서 확인하세요.
+
+Windows
 
 1. Node.js 공식 사이트 https://nodejs.org/en/download 에서 LTS를 설치합니다.
 2. ZIP을 보관할 폴더에 풉니다. ZIP 안에서 바로 실행하지 마세요.
@@ -8,7 +15,7 @@
 4. Chrome 주소창에 chrome://extensions 입력 → 개발자 모드 켜기 →
    '압축해제된 확장 프로그램을 로드합니다' → 이 폴더 안의 extension 선택.
 5. 술술 팝업 → AI 선택 · 설정 → AI와 모델 선택 → 저장.
-   Google: Google 계정 연결을 누르고 공식 로그인 진행. 완료 후 터미널에 /quit 입력.
+   Google: Google 계정 연결 → Google 로그인 → 술술 화면에 인증 코드 붙여넣기.
    API: 본인의 API 키를 입력. ChatGPT/Google AI/Claude 구독과 API 요금은 별도입니다.
    Ollama: https://ollama.com/download 에서 설치·실행하고 로컬 모델을 내려받은 뒤
    '설치한 모델 불러오기'로 선택. 클라우드 모델은 술술에서 지원하지 않습니다.

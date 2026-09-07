@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDecoder, encodeMessage } from './core.mjs';
@@ -13,6 +12,7 @@ const router = new ProviderRouter(config,settings);
 const origin = process.argv[2];
 if (origin !== `chrome-extension://${config.extensionId}/`) process.exit(1);
 const active = new Map();
+let loginSession;
 const MAX_CONCURRENT_TRANSLATIONS = 4;
 let saving = false;
 const abortAll = () => { for (const task of active.values()) task.controller.abort(); };
@@ -25,6 +25,7 @@ async function handle(message) {
     if (message.type === 'health') return send({ id, ok: true, result: router.health() });
     if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:MAX_CONCURRENT_TRANSLATIONS} });
     if (message.type === 'settings-save') {
+      if (loginSession?.active) throw new Error('Google 계정 연결을 완료하거나 취소한 뒤 설정을 저장해 주세요.');
       if (active.size || saving) throw new Error('번역을 중지한 뒤 설정을 저장해 주세요.');
       saving = true;
       try { return send({id,ok:true,result:await settings.save(message.data)}); }
@@ -44,18 +45,25 @@ async function handle(message) {
       if (active.size || saving) throw new Error('번역을 중지한 뒤 계정을 연결해 주세요.');
       if (settings.read().selected !== 'antigravity') throw new Error('Google 로그인은 Antigravity를 선택했을 때 사용할 수 있습니다.');
       if (!router.health().installed) throw new Error('술술 설치 프로그램에서 Antigravity 설치를 선택해 주세요.');
-      const mac = process.platform === 'darwin';
-      const command = mac ? '/usr/bin/open' : path.join(process.env.SystemRoot, 'System32','WindowsPowerShell','v1.0','powershell.exe');
-      const args = mac ? ['-a','Terminal',path.join(here,'login.command')] : ['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(here,'open-login.ps1')];
-      // Fixed script and arguments, never browser-provided command text.
-      await new Promise((resolve,reject) => {
-        const child = spawn(command,args,{windowsHide:true,stdio:'ignore',shell:false});
-        child.on('error',() => reject(new Error('로그인 창을 열지 못했습니다. 설치 프로그램을 다시 실행해 주세요.')));
-        child.on('close',code => code === 0 ? resolve() : reject(new Error('로그인 창을 열지 못했습니다.')));
-      });
-      return send({ id, ok: true, result: { message: 'Google 로그인 창을 열었습니다. 연결 후 이 창을 다시 열어 주세요.' } });
+      if (!loginSession?.active) {
+        // Mark busy before the dynamic import so simultaneous starts cannot fork
+        // two authentication sessions or race a settings write.
+        saving=true;
+        try {
+          const {LoginSession}=await import('./login-session.mjs');
+          loginSession=new LoginSession(config,signal=>router.translate({blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]},signal));
+          void loginSession.start();
+        } finally {saving=false;}
+      }
+      return send({id,ok:true,result:loginSession.snapshot()});
+    }
+    if (['login-status','login-code','login-cancel'].includes(message.type)) {
+      if (!loginSession || message.data?.sessionId !== loginSession.id) throw new Error('계정 연결 시간이 지났습니다. 다시 연결해 주세요.');
+      const result=message.type==='login-code'?loginSession.submit(message.data.code):message.type==='login-cancel'?loginSession.cancel():loginSession.snapshot();
+      return send({id,ok:true,result});
     }
     if (!['translate','provider-test'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');
+    if (loginSession?.active) throw new Error('Google 계정 연결을 완료한 뒤 번역을 시작해 주세요.');
     if (saving || active.size >= MAX_CONCURRENT_TRANSLATIONS || active.has(id)) throw new Error('다른 번역이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
     const task = { id, controller: new AbortController() };
     active.set(id,task);
@@ -73,5 +81,6 @@ async function handle(message) {
   } catch (e) { send({ id, ok: false, error: e.message }); }
 }
 process.stdin.on('data', createDecoder(handle, () => process.exit(1)));
-process.stdin.on('end', () => { abortAll(); setTimeout(() => process.exit(0), 200).unref(); });
-process.stdout.on('error', () => { abortAll(); process.exit(1); });
+process.stdin.on('end', () => { loginSession?.cancel();abortAll(); setTimeout(() => process.exit(0), 200).unref(); });
+process.stdout.on('error', () => { loginSession?.cancel();abortAll(); process.exit(1); });
+for (const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>{loginSession?.cancel();abortAll();setTimeout(()=>process.exit(0),200).unref();});

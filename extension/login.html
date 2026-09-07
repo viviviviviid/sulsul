@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>술술 · Google 연결</title><link rel="stylesheet" href="options.css"></head>
+<body><main><header><a class="wordmark" href="options.html">술술<span>●</span></a><span>GOOGLE CONNECT</span></header>
+<h1>Google 계정으로<br>연결해요.</h1><p class="intro">Google에서 로그인하고, 표시되는 인증 코드를 여기 붙여넣어 주세요.</p>
+<form id="connection"><fieldset id="fields" disabled>
+<a id="google" class="login-link" target="_blank" rel="noreferrer" hidden>1. Google 로그인 열기 ↗</a>
+<label for="code">2. 인증 코드 붙여넣기</label><input id="code" type="password" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="Google에서 받은 인증 코드" required>
+<div class="actions"><button class="primary" id="connect" type="submit">연결 확인</button></div>
+</fieldset><button id="cancel" type="button">취소</button></form>
+<p id="status" role="status" aria-live="polite">Google 연결을 준비하고 있어요.</p>
+<button id="retry" type="button" hidden>다시 연결</button><a id="done" href="options.html" hidden>AI 설정으로 돌아가기 ↗</a>
+<p class="footnote">비밀번호는 Google에서만 입력합니다. 인증 코드는 이 PC의 공식 연결 프로그램으로 전달하며 술술에 저장하지 않습니다.<br>로그인 후 짧은 예문 한 번으로 연결을 확인합니다. 계정 사용량에 포함됩니다.</p>
+<footer><a href="setup.html">설치 · 문제 해결</a><span>술술 · MIT Open Source</span></footer>
+<script src="login.js"></script></main></body></html>

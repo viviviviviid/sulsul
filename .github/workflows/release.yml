@@ -5,10 +5,12 @@ on:
 permissions:
   contents: read
 jobs:
-  release:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+  build:
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,25 +19,44 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Check tag
-        shell: pwsh
-        run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and package version must match.' }
+        shell: bash
+        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./package.json").version) process.exit(1)'
       - run: npm run check
-      - shell: pwsh
+      - if: runner.os == 'Windows'
+        shell: pwsh
         run: ./install.ps1 -WithoutAntigravity -SkipRegister
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:browser
-      - run: npm run package
-      - run: npm run package:source
+      - if: runner.os == 'Windows'
+        run: npm run package
+      - if: runner.os == 'Windows'
+        run: npm run package:source
+      - if: runner.os == 'Windows'
+        run: npm run package:extension
+      - if: runner.os == 'macOS'
+        run: npm run package:macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ runner.os }}
+          path: dist/*.zip
+          if-no-files-found: error
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
       - name: Attach files to draft release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem -LiteralPath dist -Filter '*.zip' -File)
-          $checksums = $files | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
-          $checksums | Set-Content -LiteralPath dist/SHA256SUMS.txt -Encoding ascii
-          gh release create $env:GITHUB_REF_NAME $files.FullName dist/SHA256SUMS.txt --verify-tag --draft --generate-notes
-          if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed.' }
+          cd dist
+          sha256sum *.zip > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" *.zip SHA256SUMS.txt --verify-tag --draft --generate-notes

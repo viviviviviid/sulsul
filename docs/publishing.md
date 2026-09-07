@@ -13,10 +13,14 @@
 1. `package.json`, `package-lock.json`, `extension/manifest.json` 버전을 맞추고 변경 기록·설치 안내를 갱신합니다.
 2. `npm ci`, `npm run check`, `npm test`, `npm run test:browser`로 검증합니다.
 3. 커밋한 버전에 `v0.6.0`처럼 태그를 붙여 push합니다. 태그와 패키지 버전이 다르면 배포가 실패합니다.
-4. Release 워크플로가 Windows에서 설치를 검사하고 ZIP·SHA256SUMS를 만들어 **초안 GitHub Release**에 첨부합니다.
+4. Release 워크플로가 Windows와 macOS에서 검증하고 설치 ZIP·확장 ZIP·소스 ZIP·SHA256SUMS를 만들어 **초안 GitHub Release**에 첨부합니다.
 5. 초안과 첨부 파일을 검토하고 **Publish release**를 누릅니다. Actions가 비활성화된 포크는 Settings → Actions에서 활성화하세요.
 
-로컬 `npm run package`, `npm run package:source`로 ZIP을 만들고 수동 첨부해도 됩니다. ZIP 생성은 Windows PowerShell 또는 `pwsh`가 필요합니다. 실행 파일을 동봉하지 않고 사용자 PC에서 런처를 컴파일하며 선택 시 공식 Antigravity를 내려받습니다.
+로컬 `npm run package`, `npm run package:source`, `npm run package:extension`으로 Windows·소스·확장 ZIP을 만듭니다. macOS는 ditto, Windows는 PowerShell을 사용합니다. 확장 ZIP의 최상위에 manifest.json이 있으며, 압축을 풀어 개발자 모드에서 로드할 수 있습니다. 스토어에 제출할 때는 대시보드의 실제 확장 ID와 Native Messaging의 allowed_origins도 맞춰야 합니다.
+
+macOS에서 `npm run package:macos`는 현재 빌드 머신 아키텍처의 설치 앱을 만듭니다. 공식 Node.js 24.12.0 아카이브를 SHA-256으로 확인하고 Node·node-pty·미리 컴파일한 보안 저장 도구를 포함합니다. Antigravity는 재배포하지 않고 설치 시 공식 배포처에서 SHA-512를 검증해 받습니다. 설치 후 데이터는 Application Support에 보관합니다. 앱은 로컬 ad-hoc 서명만 하며 Apple Developer ID 서명·공증은 별도 배포 설정이 필요합니다. 초기 릴리스에는 이 사실을 표시합니다.
+
+Windows ZIP은 node-pty의 x64/ARM64 런타임을 포함합니다. Node.js 설치와 Windows 설치 콘솔은 현재 유지하며, 로그인 화면부터는 창 없는 가상 터미널을 사용합니다. Windows 로그인 실계정 검증은 별도 Windows 환경에서 수행해야 합니다.
 
 ## 포크의 확장 ID
 

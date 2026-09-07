@@ -41,7 +41,7 @@ $('settings').addEventListener('submit',event => {
   });
 });
 $('test').addEventListener('click',() => action(async () => { status('앞선 번역이 끝나면 짧은 예문으로 연결을 확인합니다.'); status((await rpc('provider-test')).message); }));
-$('login').addEventListener('click',() => action(async () => status((await rpc('login')).message)));
+$('login').addEventListener('click',() => chrome.tabs.create({url:chrome.runtime.getURL('login.html')}));
 $('load-models').addEventListener('click',() => action(async () => {
   const models = await rpc('ollama-models',{endpoint:$('endpoint').value});
   $('models').replaceChildren(...models.map(name => { const option = document.createElement('option'); option.value = name; return option; }));

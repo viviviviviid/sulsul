@@ -6,7 +6,7 @@ $runtime = Join-Path $work 'sulsul-agy'
 
 try {
   Write-Host ''
-  Write-Host '술술 0.6.1 - Windows 설치' -ForegroundColor Green
+  Write-Host '술술 0.7.0 - Windows 설치' -ForegroundColor Green
   Write-Host '이 폴더 안에 연결 프로그램을 설치합니다. 설치 후에는 폴더를 그대로 보관해 주세요.'
   Write-Host ''
   $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -20,6 +20,13 @@ try {
   if (!$nodePath) { throw 'Node.js가 필요합니다. https://nodejs.org/en/download 에서 Windows용 LTS를 설치한 뒤 install.cmd를 다시 실행해 주세요.' }
   $nodeVersion = (& $nodePath --version).TrimStart('v')
   if ($LASTEXITCODE -ne 0 -or ([version]$nodeVersion).Major -lt 22) { throw 'Node.js 버전이 낮습니다. 공식 사이트에서 Windows용 LTS를 설치해 주세요.' }
+
+  if (!(Test-Path -LiteralPath (Join-Path $root 'node_modules\node-pty\package.json'))) {
+    $npmPath = Join-Path (Split-Path -Parent $nodePath) 'npm.cmd'
+    if (!(Test-Path -LiteralPath $npmPath)) { throw '로그인 실행 환경이 없습니다. Windows 배포 ZIP을 다시 받아 주세요.' }
+    Push-Location $root
+    try { & $npmPath ci --omit=dev; if ($LASTEXITCODE -ne 0) { throw '로그인 실행 환경 설치 실패' } } finally { Pop-Location }
+  }
 
   if (!$WithoutAntigravity -and !$WithAntigravity -and !$SkipDownload) {
     Write-Host '1. Google 계정으로 연결 (Antigravity 설치)'
@@ -67,7 +74,7 @@ try {
   Write-Host '3. 아래 extension 폴더 선택'
   Write-Host ('   ' + (Join-Path $root 'extension')) -ForegroundColor Cyan
   Write-Host '4. 술술 > AI 선택 · 설정 > 원하는 AI와 모델 선택'
-  Write-Host '5. Google 계정 연결 또는 API 키 입력. Google 로그인 후에는 /quit 입력'
+  Write-Host '5. Google 계정 연결 또는 API 키 입력. Google 로그인 후에는 술술 화면에 인증 코드 붙여넣기'
   Write-Host '6. 술술의 쉽게 읽기 클릭'
   Write-Host ''
   Write-Host '다음부터는 설치 파일이나 터미널을 켜둘 필요가 없습니다.'

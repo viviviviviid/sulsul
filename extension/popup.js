@@ -44,7 +44,7 @@ $('translate').addEventListener('click', async () => {
 $('restore').addEventListener('click', async () => showState(await chrome.tabs.sendMessage(tabId,{type:'sulsul-restore'})));
 $('end').addEventListener('click', async () => showState(await chrome.tabs.sendMessage(tabId,{type:'sulsul-end'})));
 $('login').addEventListener('click', async () => {
-  try { $('progress').textContent = (await rpc('login')).message; }
+  try { await chrome.tabs.create({url:chrome.runtime.getURL('login.html')}); }
   catch(e) { $('progress').textContent=e.message; }
 });
 $('clear-cache').addEventListener('click', async () => {

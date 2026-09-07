@@ -2,8 +2,11 @@
   "manifest_version": 3,
   "name": "술술 — 웹을 편하게",
   "description": "내가 선택한 AI로 웹페이지·게시글·댓글을 쉬운 한국어로 바꿉니다. 새로 나타나는 내용도 읽던 자리에서 번역합니다.",
-  "version": "0.6.1",
-  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "version": "0.7.0",
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "minimum_chrome_version": "120",
   "permissions": [
     "activeTab",

@@ -23,7 +23,7 @@
 
 `providers.mjs`는 고정된 HTTP 엔드포인트, JSON 스키마, 종료 사유·응답 크기 검증을 사용합니다. 외부 도구를 제공하지 않으며 오류 본문은 그대로 전달하지 않습니다. HTTP 요청은 자동 재시도하지 않습니다. CLI Flash Low의 JSON 형식 오류만 같은 Antigravity 제공자의 Medium으로 한 번 재시도합니다.
 
-`Launcher.cs`는 Chrome의 파이프를 Node에 연결하는 창 없는 Windows 프로그램입니다. 설치 중 Windows .NET Framework 컴파일러로 생성합니다. macOS는 설치 시 생성한 `sulsul-host` 스크립트가 절대 경로의 Node를 실행하며, 로그인은 Terminal에서 같은 전용 CLI 프로필로 실행합니다. 관리자 권한이나 상시 서버는 필요하지 않습니다. 호스트 이름 `com.sulsul.gemini`는 기존 설치 호환성을 위해 유지합니다.
+`Launcher.cs`는 Chrome의 파이프를 Node에 연결하는 창 없는 Windows 프로그램입니다. 설치 중 Windows .NET Framework 컴파일러로 생성합니다. macOS는 설치 시 생성한 `sulsul-host` 스크립트가 절대 경로의 Node를 실행하며, 로그인은 `node-pty`의 가상 터미널에서 같은 전용 CLI 프로필로 실행합니다. 확장의 `login.html`에서 공식 Google OAuth URL을 열고 인증 코드를 Native Messaging으로 전달합니다. 로그인 출력과 코드는 술술 로그·파일·Chrome 저장소에 기록하지 않습니다. 인증 완료 화면을 감지한 뒤 CLI를 종료하고 새 번역 요청까지 성공해야 연결 완료로 표시합니다. 사용자는 취소할 수 있고 10분 후 자동 종료됩니다. CLI 화면 문구에 의존하므로 지원 버전 변경 시 재검증이 필요합니다. 관리자 권한이나 상시 서버는 필요하지 않습니다. 호스트 이름 `com.sulsul.gemini`는 기존 설치 호환성을 위해 유지합니다.
 
 ## 번역 속도와 취소
 
