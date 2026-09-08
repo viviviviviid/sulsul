@@ -25,7 +25,7 @@ async function handle(message) {
     if (message.type === 'health') return send({ id, ok: true, result: router.health() });
     if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:MAX_CONCURRENT_TRANSLATIONS} });
     if (message.type === 'settings-save') {
-      if (loginSession?.active) throw new Error('Google 계정 연결을 완료하거나 취소한 뒤 설정을 저장해 주세요.');
+      if (loginSession?.active) throw new Error('계정 연결을 완료하거나 취소한 뒤 설정을 저장해 주세요.');
       if (active.size || saving) throw new Error('번역을 중지한 뒤 설정을 저장해 주세요.');
       saving = true;
       try { return send({id,ok:true,result:await settings.save(message.data)}); }
@@ -43,15 +43,20 @@ async function handle(message) {
     }
     if (message.type === 'login') {
       if (active.size || saving) throw new Error('번역을 중지한 뒤 계정을 연결해 주세요.');
-      if (settings.read().selected !== 'antigravity') throw new Error('Google 로그인은 Antigravity를 선택했을 때 사용할 수 있습니다.');
-      if (!router.health().installed) throw new Error('술술 설치 프로그램에서 Antigravity 설치를 선택해 주세요.');
+      const provider=settings.read().selected;
+      if (!['antigravity','codex','claude'].includes(provider)) throw new Error('AI 설정에서 계정 연결 방식을 선택해 주세요.');
+      if (provider==='antigravity'&&!router.health().installed) throw new Error('술술 설치 프로그램에서 Antigravity 설치를 선택해 주세요.');
       if (!loginSession?.active) {
         // Mark busy before the dynamic import so simultaneous starts cannot fork
         // two authentication sessions or race a settings write.
         saving=true;
         try {
-          const {LoginSession}=await import('./login-session.mjs');
-          loginSession=new LoginSession(config,signal=>router.translate({blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]},signal));
+          const verify=signal=>router.translate({blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]},signal);
+          if(provider==='antigravity'){
+            const {LoginSession}=await import('./login-session.mjs');loginSession=new LoginSession(config,verify);
+          }else{
+            const {AccountLoginSession}=await import('./account-login.mjs');loginSession=new AccountLoginSession(config,provider,verify);
+          }
           void loginSession.start();
         } finally {saving=false;}
       }
@@ -63,7 +68,7 @@ async function handle(message) {
       return send({id,ok:true,result});
     }
     if (!['translate','provider-test'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');
-    if (loginSession?.active) throw new Error('Google 계정 연결을 완료한 뒤 번역을 시작해 주세요.');
+    if (loginSession?.active) throw new Error('계정 연결을 완료한 뒤 번역을 시작해 주세요.');
     if (saving || active.size >= MAX_CONCURRENT_TRANSLATIONS || active.has(id)) throw new Error('다른 번역이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
     const task = { id, controller: new AbortController() };
     active.set(id,task);

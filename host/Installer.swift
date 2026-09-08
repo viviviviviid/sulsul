@@ -52,7 +52,7 @@ final class Installer: NSObject, NSApplicationDelegate {
         catch { process = nil; label.stringValue = "이 Mac에서 설치 앱을 실행하지 못했습니다. Mac 종류에 맞는 설치 파일을 다시 받아 주세요."; installButton.isEnabled = true }
     }
     func finished() {
-        label.stringValue = "설치했어요. 이제 Chrome에 술술을 추가해 주세요.\n\n1. Chrome 주소창에 chrome://extensions 입력\n2. 개발자 모드 → 압축해제된 확장 프로그램 로드\n3. 폴더 선택 창에서 ⌘⇧G → 아래 버튼으로 복사한 경로 붙여넣기\n\n추가 후 술술의 AI 설정에서 Google 계정을 연결하세요."
+        label.stringValue = "설치했어요. 이제 Chrome에 술술을 추가해 주세요.\n\n1. Chrome 주소창에 chrome://extensions 입력\n2. 개발자 모드 → 압축해제된 확장 프로그램 로드\n3. 폴더 선택 창에서 ⌘⇧G → 아래 버튼으로 복사한 경로 붙여넣기\n\n추가 후 술술의 AI 설정에서 Google·ChatGPT·Claude 계정 또는 API를 선택하세요."
         installButton.title = "확장 폴더 열기"; installButton.action = #selector(reveal); installButton.isEnabled = true
         let copy = NSButton(title: "폴더 경로 복사", target: self, action: #selector(copyPath))
         copy.bezelStyle = .rounded; copy.frame = NSRect(x: 190, y: 80, width: 145, height: 38)

@@ -12,16 +12,16 @@
 
 1. 이 저장소의 **Releases**에서 `Sulsul-Windows-버전.zip`을 내려받아 보관할 폴더에 압축을 풉니다. Releases가 없다면 **Code → Download ZIP**으로 소스를 받아도 설치할 수 있습니다.
 2. [Node.js LTS](https://nodejs.org/en/download)를 설치합니다.
-3. 술술 폴더의 **`install.cmd`를 더블클릭**합니다. Google 계정 연결을 원하면 `1`, API 키·Ollama를 쓰려면 `2`를 선택합니다. 관리자 권한은 필요하지 않습니다.
+3. 술술 폴더의 **`install.cmd`를 더블클릭**합니다. Google 계정 연결을 원하면 `1`, ChatGPT·Claude 계정이나 API 키·Ollama를 쓰려면 `2`를 선택합니다. 관리자 권한은 필요하지 않습니다.
 4. Chrome 주소창에 `chrome://extensions` 입력 → **개발자 모드** 켜기 → **압축해제된 확장 프로그램을 로드합니다** → 술술의 `extension` 폴더 선택.
-5. 술술 팝업의 **AI 선택 · 설정**에서 AI를 고릅니다. Google 계정을 연결하거나 API 키를 입력하고 저장합니다. Ollama는 설치한 로컬 모델을 선택합니다.
+5. 술술 팝업의 **AI 선택 · 설정**에서 AI를 고릅니다. Google·ChatGPT·Claude는 저장 후 **계정 연결**을 누릅니다. ChatGPT·Claude의 공식 연결 프로그램은 첫 연결 때 자동으로 다운로드·검증합니다. API는 본인 키를 입력하고 저장합니다. Ollama는 설치한 로컬 모델을 선택합니다.
 6. 읽을 페이지에서 **우클릭 → 술술 번역**을 누릅니다. 술술 팝업의 **쉽게 읽기** 또는 **Alt + Shift + K**도 사용할 수 있습니다.
 
 처음 연결 이후에는 번역할 때 터미널을 켜둘 필요가 없습니다. Chrome이 연결 프로그램을 실행합니다. 설치한 폴더를 이동했다면 `install.cmd`를 다시 실행하세요. 자세한 설명은 [설치안내.txt](설치안내.txt)를 참고하세요.
 
 ## macOS에서 시작하기
 
-**macOS 13.5 이상인 Apple Silicon Mac은 Releases의 `Sulsul-Mac-arm64-0.7.1.zip`을 받아 `술술 설치.app`을 여세요.** Node.js와 개발 도구를 따로 설치할 필요가 없습니다. 설치 앱에서 Chrome 확장을 추가할 폴더를 안내합니다. 초기 배포에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다.
+**macOS 13.5 이상인 Apple Silicon Mac은 Releases의 `Sulsul-Mac-arm64-0.8.0.zip`을 받아 `술술 설치.app`을 여세요.** Node.js와 개발 도구를 따로 설치할 필요가 없습니다. 설치 앱에서 Chrome 확장을 추가할 폴더를 안내합니다. 초기 배포에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다.
 
 Google 계정 연결은 술술 화면에서 로그인 페이지를 열고 인증 코드를 붙여넣으면 됩니다. 로그인·번역 중 터미널 창은 열리지 않습니다.
 
@@ -33,9 +33,9 @@ Node.js 22 이상과 Apple Command Line Tools가 필요합니다. Command Line T
 bash install.command
 ```
 
-공식 Mac용 Antigravity CLI를 내려받아 SHA-512를 검증하고 Chrome 연결을 등록합니다. 연결 프로그램과 로그인 프로필은 `~/Library/Application Support/Sulsul/runtime`에 설치합니다. Chrome이 데스크탑 폴더의 실행 파일을 읽지 못하는 macOS 권한 문제를 방지합니다. API 키·Ollama만 사용하려면 `bash install.command --without-antigravity`를 실행하세요.
+공식 Mac용 Antigravity CLI를 내려받아 SHA-512를 검증하고 Chrome 연결을 등록합니다. 연결 프로그램과 로그인 프로필은 `~/Library/Application Support/Sulsul/runtime`에 설치합니다. Chrome이 데스크탑 폴더의 실행 파일을 읽지 못하는 macOS 권한 문제를 방지합니다. ChatGPT·Claude 계정이나 API 키·Ollama만 사용하려면 `bash install.command --without-antigravity`를 실행하세요.
 
-Chrome의 `chrome://extensions` → 개발자 모드 → **압축해제된 확장 프로그램 로드**에서 `extension` 폴더를 선택합니다. 술술의 **AI 선택 · 설정**에서 Google 계정을 연결하거나 API 키를 저장한 뒤 **연결 테스트**를 실행하세요. Mac 단축키는 **Option + Shift + K**입니다.
+Chrome의 `chrome://extensions` → 개발자 모드 → **압축해제된 확장 프로그램 로드**에서 `extension` 폴더를 선택합니다. 술술의 **AI 선택 · 설정**에서 Google·ChatGPT·Claude 계정을 연결하거나 API 키를 저장한 뒤 **연결 테스트**를 실행하세요. Mac 단축키는 **Option + Shift + K**입니다.
 
 폴더 이동이나 Node.js 경로 변경 후에는 설치를 다시 실행하세요. `bash uninstall.command`는 Chrome 연결 등록만 제거합니다. 로그인 프로필·암호화 키 파일과 Keychain의 `com.sulsul.api-keys` 항목은 남습니다. 이를 삭제하면 저장한 API 키를 복호화할 수 없습니다.
 
@@ -44,6 +44,8 @@ Chrome의 `chrome://extensions` → 개발자 모드 → **압축해제된 확�
 | 연결 방식 | 준비할 것 | 사용량 기준 |
 | --- | --- | --- |
 | Antigravity | 공식 CLI 설치 + 본인 Google 로그인 | 해당 계정의 Antigravity 이용 조건·한도 |
+| ChatGPT 계정 | 계정 연결 → 공식 Codex 로그인 | 해당 계정의 Codex 이용 조건·한도 |
+| Claude 계정 | 계정 연결 → 공식 Claude Code 로그인 | 해당 계정의 Claude Code 이용 조건·한도 |
 | Gemini API | Gemini API 키 | Google AI 구독과 별도인 API 한도·요금 |
 | OpenAI API | OpenAI API 키 | ChatGPT 구독과 별도인 API 요금 |
 | Claude API | Anthropic API 키 | Claude 구독과 별도인 API 요금 |

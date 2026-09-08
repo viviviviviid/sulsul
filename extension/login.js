@@ -12,6 +12,13 @@ function failure(error) {
 function render(result) {
   if(!result?.sessionId || !result.state)throw new Error('새 로그인 화면을 사용하려면 술술 연결 프로그램을 업데이트해 주세요.');
   sessionId=result.sessionId;$('status').textContent=result.message;$('status').className=result.state==='failed'?'error':'';
+  const provider=result.provider || 'antigravity';
+  const label={antigravity:'Google',codex:'ChatGPT',claude:'Claude'}[provider];
+  if(!label)throw new Error('지원하지 않는 계정 연결입니다.');
+  const browser=result.flow==='browser';
+  $('heading').textContent=label+' 계정으로 연결해요.';
+  $('intro').textContent=browser?'공식 로그인 창에서 연결을 완료하면 이 화면에 자동으로 반영됩니다.':'Google에서 로그인하고, 표시되는 인증 코드를 여기 붙여넣어 주세요.';
+  $('code-fields').hidden=browser;$('code').required=!browser;
   const waiting=result.state==='waiting';
   $('fields').disabled=!waiting || submitted;
   $('cancel').disabled=false;
@@ -20,8 +27,9 @@ function render(result) {
   $('google').hidden=true;
   if(waiting && result.url && !submitted) {
     const url=new URL(result.url);
-    if(url.origin!=='https://accounts.google.com' || url.username || url.password)throw new Error('Google 로그인 주소를 확인하지 못했습니다.');
-    $('google').href=url.href;$('google').hidden=false;
+    const origins={antigravity:['https://accounts.google.com'],codex:['https://auth.openai.com','https://chatgpt.com'],claude:['https://claude.ai','https://platform.claude.com','https://console.anthropic.com']}[provider];
+    if(!origins.includes(url.origin) || url.username || url.password)throw new Error('공식 로그인 주소를 확인하지 못했습니다.');
+    $('google').href=url.href;$('google').textContent=label+' 로그인 열기 ↗';$('google').hidden=false;
   }
   if(['starting','waiting','verifying'].includes(result.state))timer=setTimeout(poll,1000);
   else {$('code').value='';$('connection').hidden=true;}

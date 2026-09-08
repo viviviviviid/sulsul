@@ -8,9 +8,9 @@
                             host.mjs
                                 │
                          ProviderRouter
-                   ┌────────────┴─────────────┐
-             Antigravity CLI            HTTP 제공자
-             공식 Google 로그인       Gemini / OpenAI / Claude / Ollama
+                   ┌────────────┴──────────────────┐
+                 공식 CLI                       HTTP 제공자
+          Antigravity / Codex / Claude Code   Gemini / OpenAI / Claude / Ollama
 ```
 
 `content.js`는 렌더링된 텍스트와 열린/닫힌 Shadow DOM을 읽습니다. 링크와 코드 위치를 유지하도록 문단을 텍스트 조각으로 나눕니다. 원문과 적용된 번역을 함께 추적하여 사이트의 변경과 술술 자체 변경을 구별합니다. 번역은 `textNode.data`에만 적용합니다.
@@ -20,6 +20,8 @@
 `ProviderSettings`는 제공자별 모델·암호화 키를 저장하고 공개 가능한 상태만 반환합니다. 키 원문은 익명 파이프로 고정된 저장 프로그램에 전달합니다. Windows는 PowerShell/DPAPI, macOS는 Swift/Security/CryptoKit으로 Keychain에 보관한 키와 AES-GCM을 사용합니다. 명령 인자·환경 변수에 키를 넣지 않습니다.
 
 `ProviderRouter`는 한 요청에서 사용할 설정을 고정합니다. 캐시 범위에는 프롬프트 버전, 설정 리비전, 제공자, 모델이 반영됩니다. 설정이 변경된 뒤 도착한 이전 범위의 요청은 거부합니다.
+
+`account-runtime.mjs`는 고정 버전의 공식 Codex·Claude Code 실행 파일을 npm 레지스트리에서 내려받고 SHA-512를 검증합니다. 각 프로그램은 별도 프로필에서 자기 인증 정보를 관리하며 확장은 토큰을 받지 않습니다. ChatGPT는 Codex app-server의 공식 계정 로그인 RPC를, Claude는 수정하지 않은 Claude Code의 `auth login`을 사용합니다. 번역 직전 계정 인증 종류를 확인하고 API 인증이면 중단합니다. Codex 번역은 임시 스레드와 읽기 전용 샌드박스를 사용하며 외부 도구·셸·MCP·훅을 비활성화합니다. Claude는 도구와 MCP를 비활성화한 print 모드에서 JSON 스키마로 결과를 받습니다. 부모 환경의 API 키·인증 토큰은 두 프로그램에 전달하지 않습니다.
 
 `providers.mjs`는 고정된 HTTP 엔드포인트, JSON 스키마, 종료 사유·응답 크기 검증을 사용합니다. 외부 도구를 제공하지 않으며 오류 본문은 그대로 전달하지 않습니다. HTTP 요청은 자동 재시도하지 않습니다. CLI Flash Low의 JSON 형식 오류만 같은 Antigravity 제공자의 Medium으로 한 번 재시도합니다.
 

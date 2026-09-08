@@ -14,6 +14,9 @@ globalThis.qaRequests=[];
 globalThis.qaTests=0;
 globalThis.qaContextMenu=handleContextMenu;
 globalThis.qaFailNext=false;
+globalThis.qaLogin=()=>qaSettings.selected==='antigravity'
+ ? {sessionId:'test-login',state:'waiting',url:'https://accounts.google.com/o/oauth2/auth?test=1',message:'인증 코드를 붙여넣어 주세요.'}
+ : {sessionId:'test-login',provider:qaSettings.selected,flow:'browser',state:'waiting',url:qaSettings.selected==='codex'?'https://auth.openai.com/authorize?test=1':'https://claude.ai/oauth/authorize?test=1',message:'공식 로그인 창에서 연결해 주세요.'};
 native=async(type,data,tabId,sourceUrl)=>{
  if(type==='settings-get')return structuredClone(qaSettings);
  if(type==='settings-save'){
@@ -25,10 +28,9 @@ native=async(type,data,tabId,sourceUrl)=>{
  }
  if(type==='provider-test'){qaTests++;return {message:'연결 성공 · 편하게 읽어요.'};}
  if(type==='ollama-models')return ['local-model:8b','other-model:latest'];
- if(type==='login')return {sessionId:'test-login',state:'waiting',url:'https://accounts.google.com/o/oauth2/auth?test=1',message:'인증 코드를 붙여넣어 주세요.'};
- if(type==='login-status')return {sessionId:'test-login',state:'waiting',url:'https://accounts.google.com/o/oauth2/auth?test=1',message:'인증 코드를 붙여넣어 주세요.'};
+ if(type==='login'||type==='login-status')return qaLogin();
  if(type==='login-code')return {sessionId:'test-login',state:'connected',message:'Google 계정을 연결했어요.'};
- if(type==='login-cancel')return {sessionId:'test-login',state:'canceled',message:'계정 연결을 취소했어요.'};
+ if(type==='login-cancel')return {...qaLogin(),state:'canceled',message:'계정 연결을 취소했어요.'};
  if(type==='translate'){
   if(qaFailNext){qaFailNext=false;throw new Error('일시적인 테스트 연결 오류');}
   qaRequests.push({provider:qaSettings.selected,model:qaSettings.providers[qaSettings.selected].model});
@@ -52,7 +54,7 @@ try{
  await login.locator('#retry').waitFor({state:'visible'});assert.match(await login.locator('#status').innerText(),/취소/);
  await login.close();console.log('PASS Google login page, code clearing, connected state and cancellation');
  await options.goto('chrome-extension://'+extensionId+'/options.html');await waitStatus('선택한 AI로만');
- assert.equal(await options.locator('#provider option').count(),5);
+ assert.equal(await options.locator('#provider option').count(),7);
  assert.equal(await options.locator('#provider').inputValue(),'antigravity');
  const page=await context.newPage();await page.goto('https://reader.test/page');
  const tabId=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://reader.test/page').id);
@@ -181,6 +183,21 @@ try{
  await options.locator('#clear-key').check();await options.locator('#save').click();await waitStatus('저장했어요');assert.equal(await options.locator('#key-state').innerText(),'키 미등록');
  await options.locator('#provider').selectOption('ollama');await options.locator('#load-models').click();await waitStatus('모델 입력란');
  assert.equal(await options.locator('#model').inputValue(),'local-model:8b');await options.locator('#save').click();await waitStatus('저장했어요');
+ for(const [provider,label,origin] of [['codex','ChatGPT','https://auth.openai.com'],['claude','Claude','https://claude.ai']]){
+  await options.locator('#provider').selectOption(provider);
+  assert.equal(await options.locator('#api-key').isVisible(),false);
+  await options.locator('#save').click();await waitStatus('저장했어요');
+  assert.equal(await options.locator('#login').isVisible(),true);assert.match(await options.locator('#login').innerText(),new RegExp(label));
+  const opened=context.waitForEvent('page');await options.locator('#login').click();const loginPage=await opened;
+  await loginPage.waitForURL('chrome-extension://'+extensionId+'/login.html');
+  await loginPage.locator('#google').waitFor({state:'visible'});
+  assert.match(await loginPage.locator('#heading').innerText(),new RegExp(label));
+  assert.equal(new URL(await loginPage.locator('#google').getAttribute('href')).origin,origin);
+  assert.equal(await loginPage.locator('#code').isVisible(),false);
+  await loginPage.locator('#cancel').click();await loginPage.locator('#retry').waitFor({state:'visible'});
+  assert.match(await loginPage.locator('#status').innerText(),/취소/);await loginPage.close();
+ }
+ console.log('PASS ChatGPT and Claude selection, official login links, hidden code/key inputs and cancellation');
  await options.locator('#provider').selectOption('antigravity');await options.locator('#save').click();await waitStatus('저장했어요');
  assert.equal(await options.locator('#login').isVisible(),true);
  await options.setViewportSize({width:900,height:1000});await options.screenshot({path:path.join(scratch,'settings.png'),fullPage:true});

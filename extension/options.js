@@ -21,7 +21,8 @@ function render() {
   $('api-key').value = ''; $('clear-key').checked = false;
   $('key-state').textContent = option.hasKey ? '저장된 키 있음' : '키 미등록';
   if (links[id]) $('key-link').href = links[id];
-  $('login').hidden = id !== 'antigravity';
+  $('login').hidden = !['antigravity','codex','claude'].includes(id);
+  $('login').textContent = ({antigravity:'Google',codex:'ChatGPT',claude:'Claude'}[id] || '') + ' 계정 연결';
   $('test').disabled = dirty; $('login').disabled = dirty;
 }
 async function action(fn) {

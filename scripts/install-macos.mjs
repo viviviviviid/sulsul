@@ -65,7 +65,7 @@ if (args.has('--uninstall')) {
   fs.mkdirSync(installedHost,{recursive:true,mode:0o700});
   fs.mkdirSync(path.join(installed,'extension'),{recursive:true});
   fs.cpSync(path.join(root,'extension'),path.join(installed,'extension'),{recursive:true});
-  for (const name of ['core.mjs','runner.mjs','host.mjs','setup-runtime.mjs','translation.schema.json','login.mjs','login-session.mjs','provider-settings.mjs','providers.mjs','secret-store-macos']) {
+  for (const name of ['core.mjs','runner.mjs','host.mjs','setup-runtime.mjs','translation.schema.json','login.mjs','login-session.mjs','account-runtime.mjs','account-providers.mjs','account-login.mjs','provider-settings.mjs','providers.mjs','secret-store-macos']) {
     fs.copyFileSync(path.join(host,name),path.join(installedHost,name));
   }
   const pty=path.join(root,'node_modules','node-pty');
@@ -99,5 +99,5 @@ if (args.has('--uninstall')) {
   if (fs.existsSync(registry)) JSON.parse(fs.readFileSync(registry,'utf8'));
   fs.mkdirSync(path.dirname(registry),{recursive:true});
   fs.copyFileSync(path.join(installedHost,'com.sulsul.gemini.json'),registry);
-  console.log(`설치 완료! Chrome의 chrome://extensions에서 개발자 모드를 켜고 다음 폴더를 로드하세요:\n${path.join(bundled?installed:root,'extension')}\n술술 → AI 선택 · 설정 → Google 계정 연결 또는 API 키 저장 → 연결 테스트`);
+  console.log(`설치 완료! Chrome의 chrome://extensions에서 개발자 모드를 켜고 다음 폴더를 로드하세요:\n${path.join(bundled?installed:root,'extension')}\n술술 → AI 선택 · 설정 → Google·ChatGPT·Claude 계정 연결 또는 API 키 저장 → 연결 테스트`);
 }

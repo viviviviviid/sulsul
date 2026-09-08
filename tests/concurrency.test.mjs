@@ -21,7 +21,7 @@ test('native host runs four requests, cancels only the requested job, and guards
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const endpoint=`http://127.0.0.1:${server.address().port}`;
   const extensionId='a'.repeat(32);
-  for(const name of ['host.mjs','core.mjs','runner.mjs','provider-settings.mjs','providers.mjs','translation.schema.json']){
+  for(const name of ['host.mjs','core.mjs','runner.mjs','provider-settings.mjs','providers.mjs','account-runtime.mjs','account-providers.mjs','translation.schema.json']){
     fs.copyFileSync(new URL('../host/'+name,import.meta.url),path.join(directory,name));
   }
   fs.writeFileSync(path.join(directory,'config.json'),JSON.stringify({extensionId,profile:directory,cli:'unused',model:'test'}));

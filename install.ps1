@@ -6,7 +6,7 @@ $runtime = Join-Path $work 'sulsul-agy'
 
 try {
   Write-Host ''
-  Write-Host '술술 0.7.0 - Windows 설치' -ForegroundColor Green
+  Write-Host '술술 0.8.0 - Windows 설치' -ForegroundColor Green
   Write-Host '이 폴더 안에 연결 프로그램을 설치합니다. 설치 후에는 폴더를 그대로 보관해 주세요.'
   Write-Host ''
   $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -30,7 +30,7 @@ try {
 
   if (!$WithoutAntigravity -and !$WithAntigravity -and !$SkipDownload) {
     Write-Host '1. Google 계정으로 연결 (Antigravity 설치)'
-    Write-Host '2. API 키 또는 Ollama로 연결 (Antigravity 설치 생략)'
+    Write-Host '2. ChatGPT·Claude 계정, API 키 또는 Ollama (Antigravity 설치 생략)'
     $choice = Read-Host '연결 방식 선택 [1/2, 기본 1]'
     if ($choice -eq '2') { $WithoutAntigravity = $true }
   }
@@ -74,7 +74,7 @@ try {
   Write-Host '3. 아래 extension 폴더 선택'
   Write-Host ('   ' + (Join-Path $root 'extension')) -ForegroundColor Cyan
   Write-Host '4. 술술 > AI 선택 · 설정 > 원하는 AI와 모델 선택'
-  Write-Host '5. Google 계정 연결 또는 API 키 입력. Google 로그인 후에는 술술 화면에 인증 코드 붙여넣기'
+  Write-Host '5. Google·ChatGPT·Claude 계정 연결 또는 API 키 입력. Google 로그인은 인증 코드를 술술에 붙여넣기'
   Write-Host '6. 술술의 쉽게 읽기 클릭'
   Write-Host ''
   Write-Host '다음부터는 설치 파일이나 터미널을 켜둘 필요가 없습니다.'

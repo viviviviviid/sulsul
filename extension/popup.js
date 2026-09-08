@@ -28,8 +28,9 @@ async function init() {
     $('model-name').title = status.model || '';
     $('connection-text').textContent = status.message;
     $('connection-dot').className = 'status-dot ' + (status.loginCached ? 'ready' : 'error');
-    $('login').hidden = status.provider !== 'antigravity';
-    $('login').textContent = status.loginCached ? 'Google 계정 다시 연결' : 'Google 계정 연결';
+    const account = {antigravity:'Google',codex:'ChatGPT',claude:'Claude'}[status.provider];
+    $('login').hidden = !account;
+    $('login').textContent = account + (status.loginCached ? ' 계정 다시 연결' : ' 계정 연결');
     if (!status.installed) $('setup').hidden = false;
   } catch(e) {
     $('connection-text').textContent = e.message;

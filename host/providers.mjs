@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import { buildPrompt, parseTranslation } from './core.mjs';
 import { health as cliHealth, translate as cliTranslate } from './runner.mjs';
 import { PROVIDERS, localEndpoint, validateModel } from './provider-settings.mjs';
+import {accountPaths,ACCOUNT_CLIS} from './account-runtime.mjs';
+import {translateAccount} from './account-providers.mjs';
+import path from 'node:path';
 
 const schema = JSON.parse(fs.readFileSync(new URL('./translation.schema.json',import.meta.url),'utf8'));
 const MAX_RESPONSE = 4_000_000;
@@ -103,6 +106,10 @@ export class ProviderRouter {
     const publicSettings = this.settings.public();
     const id = publicSettings.selected, option = publicSettings.providers[id];
     if (id === 'antigravity') return {...cliHealth({...this.config,model:option.model}),provider:id};
+    if (ACCOUNT_CLIS[id]) {
+      const runtime=accountPaths(this.config,id),installed=fs.existsSync(runtime.cli),loginCached=fs.existsSync(path.join(runtime.profile,'verified.json'));
+      return {protocol:1,installed,loginCached,provider:id,model:option.model,modelLabel:`${runtime.label} · ${option.model}`,message:!installed?'계정 연결을 누르면 공식 연결 프로그램을 준비합니다.':loginCached?'최근 번역에서 계정 연결을 확인했어요.':'AI 설정에서 계정을 연결해 주세요.'};
+    }
     const ready = !option.key || option.hasKey;
     return {protocol:1,installed:true,provider:id,loginCached:ready,model:option.model,modelLabel:`${PROVIDERS[id].label} · ${option.model || '모델 미선택'}`,message:ready ? 'AI 설정 저장됨 · 연결 테스트로 확인할 수 있어요.' : 'AI 설정에서 API 키를 저장해 주세요.'};
   }
@@ -111,6 +118,7 @@ export class ProviderRouter {
     if (expectedScope && expectedScope !== this.settings.public(state).scope) throw new Error('AI 설정이 변경되었습니다. 이어 읽기를 다시 눌러 주세요.');
     const provider = await this.settings.credentials(state);
     if (provider.id === 'antigravity') return cliTranslate({...this.config,model:provider.model},data,signal);
+    if (ACCOUNT_CLIS[provider.id]) return translateAccount(this.config,provider,data,signal);
     return translateAPI(provider,data,signal);
   }
   async localModels(endpoint) {

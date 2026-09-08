@@ -8,6 +8,20 @@
 
 추가 크레딧·API 키 방식으로 전환하지 않습니다. 계정의 이용 자격과 한도는 Google이 결정합니다. [공식 설치](https://antigravity.google/docs/cli/install), [요금제](https://antigravity.google/docs/plans/), [크레딧 설정](https://antigravity.google/docs/cli/credits/).
 
+## ChatGPT 계정
+
+AI 설정에서 **ChatGPT 계정 · Codex**를 고르고 저장한 뒤 **ChatGPT 계정 연결**을 누릅니다. 공식 Codex 0.153.4를 npm 공식 배포에서 내려받아 SHA-512를 확인합니다. 로그인 페이지를 열어 ChatGPT에서 인증하면 연결 상태가 자동으로 반영됩니다. 모델 입력란의 default는 Codex 기본 모델을 사용하며 모델 ID를 직접 지정할 수도 있습니다.
+
+인증과 갱신은 공식 Codex app-server가 맡습니다. 술술은 OAuth 토큰을 읽거나 복사하지 않습니다. 번역마다 새 임시 세션을 사용하며 명령·브라우저·플러그인을 끄고 파일 쓰기는 읽기 전용 샌드박스로 제한합니다. ChatGPT로 인증되지 않았다면 번역을 실행하지 않습니다. [OpenAI 공식 문서](https://learn.chatgpt.com/docs/app-server#authentication-modes).
+
+## Claude 계정
+
+AI 설정에서 **Claude 계정 · Claude Code**를 고르고 저장한 뒤 **Claude 계정 연결**을 누릅니다. 공식 Claude Code 2.1.263을 다운로드·검증하고 수정 없이 실행합니다. 열리는 공식 로그인 창에서 본인 Claude 계정으로 연결하세요. 연결 완료 후 짧은 번역으로 확인합니다. 기본 모델 별칭은 sonnet입니다.
+
+Claude 로그인은 공식 프로그램에서 완료하며 술술은 구독 토큰이나 인증 코드를 받지 않습니다. 번역 전 공식 auth status로 구독 연결을 확인합니다. 도구·MCP·후크·세션 저장은 번역 실행에서 끕니다. Console/API 인증은 이 연결에서 사용하지 않으며 **Claude API**를 별도로 선택하세요. [공식 CLI](https://code.claude.com/docs/en/cli-reference), [인증 관련 지침](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use).
+
+두 계정 연결의 프로그램과 전용 로그인 프로필은 설치 폴더의 data/accounts/에 보관합니다. 최초 다운로드에는 인터넷 연결과 수백 MB의 여유 공간이 필요합니다. 사용 한도·추가 사용량 설정은 각 서비스의 계정 설정에 따릅니다. 개인 설치 폴더를 다른 사람에게 공유하지 마세요.
+
 ## Gemini API
 
 [Google AI Studio](https://aistudio.google.com/api-keys)에서 API 키를 만들고 입력합니다. 기본 모델은 `gemini-3.8-flash`이며 변경할 수 있습니다. Google AI 구독과 별도인 API 한도·요금이 적용됩니다. `generateContent`와 JSON 스키마를 사용합니다. [API 문서](https://ai.google.dev/api/generate-content), [구조화 출력](https://ai.google.dev/gemini-api/docs/structured-output).

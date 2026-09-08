@@ -9,6 +9,10 @@ import { PROMPT_VERSION } from './core.mjs';
 export const PROVIDERS = Object.freeze({
   antigravity: { label: 'Antigravity · Google 계정', model: DEFAULT_MODEL, key: false,
     note: '공식 Google 로그인으로 연결합니다. 계정의 사용 한도가 적용되며, 추가 크레딧 사용은 꺼져 있습니다.' },
+  codex: { label: 'ChatGPT 계정 · Codex', model: 'default', key: false,
+    note: '계정 연결을 누르면 공식 Codex를 준비합니다. ChatGPT로 로그인하며 해당 계정의 Codex 사용 한도가 적용됩니다. default는 계정의 기본 모델입니다.' },
+  claude: { label: 'Claude 계정 · Claude Code', model: 'sonnet', key: false,
+    note: '계정 연결을 누르면 공식 Claude Code를 준비합니다. 공식 로그인 창에서 본인 구독 계정을 연결하세요. API 키 방식은 별도로 선택할 수 있습니다.' },
   gemini: { label: 'Gemini API', model: 'gemini-3.8-flash', key: true,
     note: 'Google AI 구독과 별도입니다. API 키의 무료 한도 또는 사용량 요금이 적용됩니다.' },
   openai: { label: 'OpenAI API', model: 'gpt-5.4-mini', key: true,
