@@ -35,5 +35,5 @@ if (!windows) {
     fs.chmodSync(target,0o700);
   }
 }
-write(path.join(host,'com.sulsul.gemini.json'),{name:'com.sulsul.gemini',description:'Sulsul AI translation host',path:path.join(host,windows ? 'sulsul-host.exe' : 'sulsul-host'),type:'stdio',allowed_origins:[`chrome-extension://${extensionId}/`]});
+write(path.join(host,'com.sulsul.gemini.json'),{name:'com.sulsul.gemini',description:'Sulsul web translation host',path:path.join(host,windows ? 'sulsul-host.exe' : 'sulsul-host'),type:'stdio',allowed_origins:[`chrome-extension://${extensionId}/`]});
 console.log(JSON.stringify({extensionId,profile,manifest:path.join(host,'com.sulsul.gemini.json')}));

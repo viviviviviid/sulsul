@@ -5,7 +5,7 @@ $work = Join-Path $root 'data'
 
 try {
   Write-Host ''
-  Write-Host '술술 0.9.0 - Windows 설치' -ForegroundColor Green
+  Write-Host '술술 — AI 웹 번역기 - Windows 설치' -ForegroundColor Green
   Write-Host '이 폴더 안에 연결 프로그램을 설치합니다. 설치 후에는 폴더를 그대로 보관해 주세요.'
   Write-Host ''
   $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue

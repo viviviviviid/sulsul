@@ -1,8 +1,10 @@
-# 술술 · Sulsul
+# 술술 — AI 웹 번역기
 
 **ChatGPT로 웹페이지를 읽던 자리에서 원하는 언어로 자연스럽게 읽으세요.**
 
-문서, 기사, 게시글, 댓글을 페이지 안에서 번역하는 Chrome 확장 프로그램입니다. 링크·강조·코드를 보존하고, 동적으로 추가되는 글도 읽습니다. MIT 오픈소스이며 술술 자체 서버가 없습니다.
+**술술(Sulsul)**은 내 ChatGPT 계정으로 문서, 기사, 게시글, 댓글을 페이지 안에서 번역하는 Chrome 확장 프로그램입니다. 링크·강조·코드를 보존하고, 동적으로 추가되는 글도 읽습니다.
+
+현재 버전은 **0.14.5**입니다. Chrome 120 이상과 Windows·macOS 설치를 지원합니다. Linux용 설치 프로그램과 Chrome 웹 스토어 버전은 아직 제공하지 않습니다. [변경 기록](CHANGELOG.md) · [설치 가이드](docs/installation.md) · [배포자 가이드](docs/publishing.md).
 
 설정에서 한국어·영어·일본어·중국어(간체/번체)·스페인어·프랑스어·독일어를 선택할 수 있습니다. 원문 언어는 자동 판단하며 캐시는 목표 언어별로 구분합니다. 설정 UI는 현재 한국어입니다.
 
@@ -25,37 +27,39 @@
 
 위 이미지는 예시 문서와 미리 준비한 번역·연결 상태로 촬영한 실제 확장 UI입니다. AI 번역 품질이나 속도를 측정한 화면은 아닙니다.
 
-## Windows 설치
 
-1. [Releases](https://github.com/viviviviviid/sulsul/releases/latest)에서 Windows ZIP을 내려받아 보관할 폴더에 압축을 풉니다.
-2. [Node.js LTS](https://nodejs.org/en/download)를 설치합니다. Node.js 22 이상이 필요합니다.
-3. **install.cmd**를 더블클릭합니다. 관리자 권한은 필요하지 않습니다.
-4. Chrome 주소창에 **chrome://extensions** 입력 → 개발자 모드 → 압축해제된 확장 프로그램 로드 → **extension** 폴더 선택.
-5. 술술의 **ChatGPT 연결**을 누르고 공식 로그인 창에서 로그인합니다. 공식 Codex 연결 프로그램은 첫 연결 때 다운로드하고 검증합니다.
-6. 읽을 페이지에서 **우클릭 → 술술 번역**을 누릅니다.
+## 어떤 방식으로 사용할까요?
 
-다음부터는 터미널이나 설치 파일을 켜둘 필요가 없습니다. Chrome이 필요할 때 연결 프로그램을 실행합니다. 설치한 폴더는 이동하거나 삭제하지 마세요.
+술술은 **Chrome 확장 + PC 연결 프로그램 + 본인 ChatGPT 계정**이 모두 필요합니다. 설치 방식과 관계없이 같습니다. 별도 웹 서버를 배포하거나 공용 API 키를 준비할 필요는 없습니다.
 
-## Mac 설치
+| 목적 | 설치·배포 경로 | 현재 상태 |
+| --- | --- | --- |
+| 제작자가 올린 버전을 바로 사용 | 스토어에서 확장 설치 + 같은 배포자의 PC 연결 프로그램 설치 | 스토어 미출시. 공개 후 이곳에 링크 제공 |
+| 지금 ZIP으로 바로 사용 | [Releases](https://github.com/viviviviviid/sulsul/releases/latest) 다운로드 + PC 설치 + 확장을 개발자 모드로 로드 | 사용 가능 |
+| 저장소를 직접 받아 사용·수정 | clone 또는 소스 ZIP + 설치 스크립트 + 확장을 개발자 모드로 로드 | 사용 가능. 포크·스토어 등록 불필요 |
+| 내 이름으로 다른 사람에게 배포 | 내 저장소·릴리스 또는 내 스토어 항목 + 내 확장 ID에 맞는 연결 프로그램 | [배포자 가이드](docs/publishing.md)에 따라 직접 구성 |
 
-macOS 13.5 이상인 Apple Silicon Mac은 Releases의 **Sulsul-Mac-arm64** ZIP을 풀고 **술술 설치.app**을 여세요. Node.js와 개발 도구는 따로 필요하지 않습니다. 설치 창에서 안내하는 폴더로 Chrome 확장을 추가한 뒤 **ChatGPT 연결**을 누르세요.
+**스토어에 올라간 확장도 PC 연결 프로그램이 필요합니다.** 스토어 사용자는 개발자 모드와 소스 다운로드가 필요 없으며, 설치 앱의 `extension` 폴더 로드 단계는 건너뜁니다. 확장과 연결 프로그램은 같은 배포자의 것을 사용하세요.
 
-초기 Mac 설치 앱에는 Apple 개발자 서명·공증이 없어 macOS의 실행 확인이 필요할 수 있습니다. Chrome 웹 스토어 버전은 아직 없습니다.
+### 지금 설치하기
 
-소스에서 직접 설치하려면 Node.js 22 이상을 설치하고 다음을 실행하세요.
+- **Windows:** Node.js 22 이상 설치 → Windows ZIP 압축 해제 → `install.cmd` → `chrome://extensions`의 개발자 모드에서 `extension` 폴더 로드.
+- **Apple Silicon Mac(macOS 13.5 이상):** Mac ZIP 압축 해제 → `술술 설치.app` → 안내받은 폴더를 개발자 모드로 로드. Node.js와 개발 도구는 별도로 필요하지 않습니다. 현재 설치 앱에는 Apple Developer ID 서명·공증이 없습니다.
+- **소스:** 저장소를 내려받고 `npm ci` → Windows는 `install.cmd`, Mac은 `bash install.command` → 소스의 `extension` 폴더 로드.
 
-```sh
-npm ci
-bash install.command
-```
+설치 후 술술의 **ChatGPT 연결**에서 로그인하고 웹페이지의 **우클릭 → 술술 번역**으로 시작하세요. 공식 Codex 연결 프로그램은 첫 연결 때 다운로드·검증합니다. 다음부터는 Chrome이 필요할 때 실행하므로 터미널을 켜둘 필요가 없습니다.
 
-연결 프로그램은 ~/Library/Application Support/Sulsul/runtime에 설치됩니다. Chrome 확장으로는 소스의 extension 폴더를 선택하세요. bash uninstall.command는 Chrome 연결 등록을 제거하고 로그인 데이터는 남깁니다.
+자세한 [운영체제별 설치·업데이트·삭제](docs/installation.md)와 [간단 설치 안내](설치안내.txt)를 참고하세요.
 
 ## ChatGPT 연결과 사용 한도
 
 ChatGPT 계정으로 공식 Codex에 로그인하며 **해당 계정의 Codex 이용 한도**가 적용됩니다. ChatGPT 대화의 남은 횟수를 그대로 가져오는 기능은 아닙니다. 계정에서 Codex 사용 권한이 있어야 합니다. 로그인과 연결 확인은 인증 상태만 확인하며 AI를 호출하지 않습니다. 모델 사용 가능 여부와 한도는 실제 번역 시 확인합니다.
 
-기본 모델은 계정 기본값인 default입니다. **ChatGPT 설정 → 모델 설정**에서 계정이 이용할 수 있는 Codex 모델 ID로 변경할 수 있습니다. 별도 API 키 연결이나 유료 API 자동 전환은 제공하지 않습니다. [연결 설명](docs/providers.md).
+기본 모델은 계정 기본값인 `default`이며 Fast 모드는 꺼져 있습니다. **ChatGPT 설정 → 모델 설정**에서 목록의 모델을 고르거나 **직접 입력**으로 Codex 모델 ID를 지정할 수 있습니다. 목록은 고정된 선택지이며 실제 사용 가능 여부는 계정에 따라 다릅니다. 저장 후 **연결 확인**으로 확인하세요.
+
+**Fast 모드**는 지원되는 모델에서 속도를 높이는 대신 사용량이 더 차감됩니다. 지원 모델과 차감 기준은 [OpenAI Fast 모드 안내](https://learn.chatgpt.com/docs/agent-configuration/speed)를 따릅니다. 모델·Fast 설정을 저장하면 진행 중인 번역을 원문으로 돌리고 일시중지합니다. 페이지에서 **이어 읽기**를 누르면 저장한 설정으로 번역합니다.
+
+별도 API 키 연결이나 유료 API 자동 전환은 제공하지 않습니다. 한도·인증 오류는 자동 재시도하지 않습니다. [연결 설명](docs/providers.md).
 
 ## 읽는 방법
 
@@ -90,9 +94,20 @@ ChatGPT 계정으로 공식 Codex에 로그인하며 **해당 계정의 Codex �
 
 사용 기록의 **이전 요청과 겹침**은 보관 중인 기록에서 같은 원문·문맥·모델 설정으로 다시 요청된 문단 수입니다. 로컬 비밀키로 만든 비교값만 저장하며 원문은 기록하지 않습니다. 재시도나 캐시 삭제 후에도 겹칠 수 있으므로 곧바로 오류를 뜻하지 않습니다. CSV의 요청 ID와 문단 묶음 식별값으로 요청을 비교할 수 있습니다. 업데이트 이전 기록은 비교할 수 없습니다.
 
+## 저장된 번역
+
+문단별로 번역을 저장해 요청 묶음이나 수집 순서가 바뀌어도 다시 사용합니다. 메뉴는 같은 출처의 다른 페이지에서, 본문은 같은 문서·제목·절 안에서 재사용합니다. 일부 문단만 바뀌면 바뀐 문단만 새로 요청합니다.
+
+캐시는 번역 언어·모델·Fast 설정별로 구분하며 이 Chrome 프로필에 최대 약 3MB·1,500항목을 보관합니다. 오래된 항목부터 제거하고, 설정의 **저장된 번역 지우기**로 삭제할 수 있습니다.
+
 ## 업데이트
 
-새 ZIP의 같은 이름 파일을 기존 설치 폴더에 덮어쓰고 설치 프로그램을 다시 실행하세요. Chrome 확장 목록에서 술술의 새로고침 버튼을 누르고 읽던 웹페이지도 새로고침하세요.
+- **스토어 공개 후:** 확장은 Chrome이 업데이트하지만, PC 연결 프로그램은 새 설치 파일을 직접 실행해야 합니다. 연결 프로그램에는 자체 자동 업데이트 기능이 없습니다.
+- **Windows ZIP:** 새 ZIP의 같은 이름 파일을 기존 설치 폴더에 덮어쓰고 `install.cmd`를 다시 실행하세요.
+- **Mac 설치 앱:** 새 Mac ZIP을 풀고 `술술 설치.app`을 다시 실행하세요. 기존 Application Support 폴더의 연결 프로그램과 확장이 갱신됩니다.
+- **소스 설치:** `git pull --ff-only`와 `npm ci` 후 Windows는 `install.cmd`, Mac은 `bash install.command`를 실행하세요.
+
+연결 프로그램 갱신 전에는 읽기를 종료하고 Chrome을 완전히 닫으세요. 재설치 후 ZIP·소스 확장은 `chrome://extensions`에서 새로고침하고 읽던 웹페이지도 새로고침합니다. 같은 ID·설치 경로로 업데이트하면 로그인·설정이 유지됩니다. 스토어·포크로 설치 경로를 바꾸면 ID가 달라질 수 있으므로 [전환 안내](docs/installation.md#업데이트와-설치-경로-전환)를 따르세요.
 
 0.9.0부터 ChatGPT만 지원합니다. 이전에 다른 AI를 골랐어도 ChatGPT로 전환됩니다. 기존 Codex 로그인과 모델 설정은 유지됩니다. 이전 제공자의 로그인 자료는 자동 삭제하지 않지만 사용하지 않습니다. 다른 AI만 연결했던 사용자는 ChatGPT 연결이 한 번 필요합니다.
 
@@ -101,6 +116,8 @@ ChatGPT 계정으로 공식 Codex에 로그인하며 **해당 계정의 Codex �
 번역 대상 텍스트, 짧은 인접 원문, 페이지 및 문단 제목은 OpenAI로 전달됩니다. 인증은 이 PC의 공식 Codex가 관리하며 확장은 비밀번호나 토큰을 받지 않습니다. 번역 결과는 Chrome 프로필에 저장하고 설정에서 지울 수 있습니다. [개인정보 안내](PRIVACY.md).
 
 ## 개발·포크
+
+개인 사용에는 포크가 필요하지 않습니다. 수정본을 내 저장소에서 관리하려면 포크한 주소를 사용하세요. 아래 명령은 소스를 받고 검증하는 절차이며, 로컬 사용에는 [PC 연결 프로그램 설치](docs/installation.md#저장소에서-직접-설치)도 필요합니다.
 
 ```sh
 git clone https://github.com/viviviviviid/sulsul.git
@@ -112,10 +129,12 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-실행에는 Node.js만 필요하며 Playwright는 브라우저 테스트에 사용합니다. 자동 테스트는 모의 응답으로 로그인 상태, 번역 구조, 설정 전환, 취소, 캐시, 원문 복원과 페이지 이동을 검증합니다. 실제 계정 접근과 번역 품질은 로그인 후 확인하세요.
+Node.js 22 이상이 필요하며 CI는 Node.js 24를 사용합니다. npm 런타임 의존성은 없고 Playwright는 브라우저 테스트에만 사용합니다. 실제 번역에는 첫 연결 때 내려받는 공식 Codex 실행 파일이 필요합니다. 자동 테스트는 모의 응답으로 로그인 상태, 번역 조각 누락, 모델·Fast 설정, 취소, 문단 캐시, 본문 우선순위, 원문 복원과 페이지 이동을 검증합니다. 실제 계정 접근과 번역 품질은 로그인 후 확인하세요.
 
-Windows에서 npm run package는 설치 ZIP, npm run package:source는 소스 ZIP, npm run package:extension은 확장 ZIP을 만듭니다. Mac 설치 앱은 macOS에서 npm run package:macos로 만듭니다. [배포 안내](docs/publishing.md) · [기여 안내](CONTRIBUTING.md).
+`npm run package`는 Windows 설치 ZIP, `npm run package:source`는 소스 ZIP, `npm run package:extension`은 확장 ZIP을 `dist/`에 만듭니다. 이 세 명령은 Windows와 macOS에서 실행할 수 있습니다. Mac 설치 앱은 macOS에서 `npm run package:macos`로 만듭니다. 확장 ZIP만 설치한 경우에도 PC의 연결 프로그램이 필요합니다. [배포 안내](docs/publishing.md) · [기여 안내](CONTRIBUTING.md) · [구조 설명](docs/architecture.md).
 
 ## 라이선스
 
-[MIT](LICENSE). 술술의 라이선스는 별도로 내려받는 Codex와 해당 서비스의 이용 조건을 대체하지 않습니다.
+[MIT](LICENSE). 저작권 고지와 라이선스를 유지해 그대로 사용·수정·재배포할 수 있습니다. 독립 배포자는 자신의 설치 파일·업데이트·지원·개인정보 안내를 관리합니다. [독립 배포 시 설정](docs/publishing.md#독립-포크-배포).
+
+술술은 OpenAI가 제작하거나 제휴한 공식 확장 프로그램이 아닙니다. 술술의 라이선스는 별도로 내려받는 Codex와 해당 서비스의 이용 조건을 대체하지 않습니다.

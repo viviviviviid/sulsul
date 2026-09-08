@@ -15,6 +15,10 @@ const folder=path.join(stage,`Sulsul-Mac-${process.arch}-${version}`);
 const app=path.join(folder,'술술 설치.app'), contents=path.join(app,'Contents'), payload=path.join(contents,'Resources','payload');
 const get=async url=>{const r=await fetch(url,{signal:AbortSignal.timeout(180_000)});if(!r.ok)throw new Error('Download failed: '+r.status);return r;};
 try {
+  // Keep installation and redistribution guidance beside the app in the ZIP.
+  for(const name of runtimeFiles.filter(n=>n.endsWith('.md')||n==='설치안내.txt')){
+    const target=path.join(folder,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(root,name),target);
+  }
   for(const name of runtimeFiles.filter(n=>n.startsWith('host/')||n.startsWith('extension/')||n==='LICENSE'||n==='scripts/install-macos.mjs')){
     const target=path.join(payload,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(root,name),target);
   }
@@ -35,7 +39,7 @@ try {
   fs.mkdirSync(path.join(contents,'MacOS'),{recursive:true});
   execFileSync('/usr/bin/xcrun',['swiftc','-O','-target',swiftTarget,path.join(root,'host/Installer.swift'),'-o',path.join(contents,'MacOS/Installer')],{stdio:'inherit'});
   fs.writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Installer</string><key>CFBundleIdentifier</key><string>com.sulsul.installer</string><key>CFBundleName</key><string>술술 설치</string><key>CFBundleVersion</key><string>${version}</string><key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundlePackageType</key><string>APPL</string><key>LSMinimumSystemVersion</key><string>13.5</string><key>NSHighResolutionCapable</key><true/></dict></plist>`);
-  fs.writeFileSync(path.join(folder,'먼저 읽어주세요.txt'),`술술 ${version} · macOS 13.5 이상 · ${process.arch}\n\n1. ZIP을 풀고 술술 설치.app을 여세요. Node.js나 개발 도구를 설치할 필요가 없습니다.\n2. 설치하기를 누르세요. 연결 앱을 설치합니다. ChatGPT 첫 연결 때 인터넷 연결이 필요합니다.\n3. 설치 창에 표시되는 안내에 따라 Chrome에 확장을 직접 추가하세요.\n4. 술술 → ChatGPT 연결 → 공식 로그인 창에서 로그인.\n\n이 초기 배포는 Apple 개발자 서명·공증이 없습니다. macOS에서 실행을 차단하면 시스템 설정 → 개인정보 보호 및 보안에서 다운로드한 앱의 실행 허용 여부를 확인하세요.\nChrome 웹 스토어 버전은 아직 없습니다.\n\n설치 위치: ~/Library/Application Support/Sulsul/runtime\n삭제: Chrome 확장을 삭제하고 ~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.sulsul.gemini.json을 제거하세요. 로그인·키 데이터는 runtime/data에 남습니다.\n`);
+  fs.writeFileSync(path.join(folder,'먼저 읽어주세요.txt'),`술술 ${version} · AI 웹 번역기 · macOS 13.5 이상 · ${process.arch}\n\n1. ZIP을 풀고 술술 설치.app을 여세요. Node.js나 개발 도구를 설치할 필요가 없습니다.\n2. 설치하기를 누르세요. 연결 앱을 설치합니다. ChatGPT 첫 연결 때 인터넷 연결이 필요합니다.\n3. 설치 창에 표시되는 안내에 따라 Chrome에 확장을 직접 추가하세요.\n4. 술술 → ChatGPT 연결 → 공식 로그인 창에서 로그인.\n\n이 초기 배포는 Apple 개발자 서명·공증이 없습니다. macOS에서 실행을 차단하면 시스템 설정 → 개인정보 보호 및 보안에서 다운로드한 앱의 실행 허용 여부를 확인하세요.\nChrome 웹 스토어 버전은 아직 없습니다.\n\n설치 위치: ~/Library/Application Support/Sulsul/runtime\n삭제: Chrome 확장을 삭제하고 ~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.sulsul.gemini.json을 제거하세요. 로그인·키 데이터는 runtime/data에 남습니다.\n`);
   // Local ad-hoc signing preserves executable integrity; this is not Developer ID notarization.
   execFileSync('/usr/bin/codesign',['--force','--deep','--sign','-',app],{stdio:'inherit'});
   execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'inherit'});
