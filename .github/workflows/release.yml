@@ -24,7 +24,7 @@ jobs:
       - run: npm run check
       - if: runner.os == 'Windows'
         shell: pwsh
-        run: ./install.ps1 -WithoutAntigravity -SkipRegister
+        run: ./install.ps1 -SkipRegister
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:browser

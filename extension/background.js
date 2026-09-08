@@ -123,6 +123,7 @@ function drainTranslations() {
 
 async function translationSettings() {
   const settings = await native('settings-get');
+  if (settings.selected !== 'codex') throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');
   const capacity = settings.maxConcurrentTranslations;
   translationLimit = Number.isInteger(capacity) && capacity > 0 ? Math.min(capacity,MAX_CONCURRENT_TRANSLATIONS) : 1;
   drainTranslations();
@@ -258,11 +259,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   else if (message.type === 'cancel' && tabId !== undefined) task = cancelTab(tabId);
   else if (message.type === 'health' && extensionPage) task = native('health');
   else if (message.type === 'login' && extensionPage) task = native('login');
-  else if (['login-status','login-code','login-cancel'].includes(message.type) && extensionPage) task = native(message.type,message.data);
+  else if (['login-status','login-cancel'].includes(message.type) && extensionPage) task = native(message.type,message.data);
   else if (message.type === 'settings-get' && extensionPage) task = native('settings-get');
   else if (message.type === 'settings-save' && extensionPage) task = saveProvider(message.data);
   else if (message.type === 'provider-test' && extensionPage) task = testProvider();
-  else if (message.type === 'ollama-models' && extensionPage) task = native('ollama-models',message.data);
   else if (message.type === 'clear-cache' && extensionPage) task = cacheWrites.promise.catch(() => {}).then(async () => {
     recentResults.clear();
     const saved = await chrome.storage.local.get(null);

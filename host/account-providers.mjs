@@ -7,15 +7,17 @@ import {accountPaths,accountEnvironment} from './account-runtime.mjs';
 
 const schema=JSON.parse(fs.readFileSync(new URL('./translation.schema.json',import.meta.url),'utf8'));
 export function accountError(id,text='') {
-  const label=id==='codex'?'ChatGPT':'Claude';
-  if(/quota|rate.?limit|usage.?limit|429|exhaust/i.test(text))return new Error(`${label} 사용 한도에 도달했습니다. 다른 AI나 API로 자동 전환하지 않습니다.`);
-  if(/authenticat|oauth|login|credential|401|token.*(?:expir|invalid)|subscription/i.test(text))return new Error(`${label} 계정 연결이 필요합니다. AI 설정에서 계정을 연결해 주세요.`);
+  const label='ChatGPT';
+  if(/quota|rate.?limit|usage.?limit|429|exhaust/i.test(text))return new Error(`${label} 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.`);
+  if(/authenticat|oauth|login|credential|401|token.*(?:expir|invalid)|subscription/i.test(text))return new Error(`${label} 계정 연결이 필요합니다. ChatGPT 설정에서 계정을 연결해 주세요.`);
   return new Error(`${label} 연결 또는 응답을 확인하지 못했습니다. 연결 테스트를 다시 실행해 주세요.`);
 }
 // Disable external capabilities; the read-only sandbox also blocks built-in patches.
-export function codexArguments() {
+export function codexArguments(fast=false) {
   const disabled=['shell_tool','unified_exec','code_mode','code_mode_host','multi_agent','multi_agent_v2','plugins','apps','browser_use','computer_use','image_generation','view_image','goals','hooks','memories','skill_search','tool_suggest','sleep_tool','workspace_dependencies'];
   const config={web_search:'disabled',forced_login_method:'chatgpt',project_doc_max_bytes:0,'skills.bundled.enabled':false,'skills.include_instructions':false,'tools.update_plan.enabled':false,'analytics.enabled':false,'agents.enabled':false};
+  config['features.fast_mode']=fast;
+  if(fast)config.service_tier='fast';
   return ['app-server','--listen','stdio://',...disabled.flatMap(name=>['--disable',name]),...Object.entries(config).flatMap(([key,value])=>['-c',key+'='+JSON.stringify(value)])];
 }
 export class CodexConnection extends EventEmitter {
@@ -50,44 +52,20 @@ export class CodexConnection extends EventEmitter {
       this.child.stdin.write(JSON.stringify({id,method,params})+'\n');
     });
   }
-  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.8.1'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
+  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.9.0'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
   close(error=accountError('codex')) {
     if(this.closed)return;this.closed=true;
     for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(error);}this.pending.clear();
     try{this.child.kill();}catch{}this.emit('closed',error);
   }
 }
-export function claudeArguments(model) {
-  return ['--print','--output-format','json','--json-schema',JSON.stringify(schema),'--model',model,'--tools','','--disallowedTools','mcp__*','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--disable-slash-commands','--setting-sources','','--settings','{"disableAllHooks":true,"enableAllProjectMcpServers":false}','--no-session-persistence','--no-chrome','--permission-mode','dontAsk'];
-}
-export function runClaude(runtime,args,input='',signal,{spawnProcess=spawn}={}) {
-  return new Promise((resolve,reject)=>{
-    if(signal?.aborted)return reject(new Error('번역을 중지했습니다.'));
-    const child=spawnProcess(runtime.cli,args,{cwd:runtime.workspace,env:accountEnvironment(runtime),shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
-    let stdout='',stderr='',size=0,settled=false;
-    const finish=(error,value)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',abort);try{child.kill();}catch{}error?reject(error):resolve(value);};
-    const abort=()=>finish(new Error('번역을 중지했습니다.'));signal?.addEventListener('abort',abort,{once:true});
-    child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');child.stdin.on('error',()=>{});
-    child.stdout.on('data',chunk=>{size+=Buffer.byteLength(chunk);if(size>4_000_000)return finish(accountError('claude'));stdout+=chunk;});
-    child.stderr.on('data',chunk=>{stderr=(stderr+chunk).slice(-8000);});
-    child.on('error',()=>finish(accountError('claude')));
-    child.on('close',code=>{if(code!==0)return finish(accountError('claude',stderr+stdout));try{finish(null,JSON.parse(stdout));}catch{finish(accountError('claude'));}});
-    child.stdin.end(input);
-  });
-}
-export async function translateAccount(config,provider,data,signal,{Connection=CodexConnection,run=runClaude}={}) {
+export async function translateAccount(config,provider,data,signal,{Connection=CodexConnection}={}) {
   const runtime=accountPaths(config,provider.id);
-  if(!fs.existsSync(runtime.cli))throw new Error('AI 설정에서 계정 연결을 먼저 눌러 주세요.');
+  if(!fs.existsSync(runtime.cli))throw new Error('ChatGPT 설정에서 계정 연결을 먼저 눌러 주세요.');
   const deadline=AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(240_000)]);
   const prompt=buildPrompt(data,{cli:false});let result;
-  if(provider.id==='claude') {
-    const auth=await run(runtime,['auth','status'],'',deadline);
-    if(!auth.loggedIn||auth.authMethod!=='claude.ai'||auth.apiProvider!=='firstParty'||!auth.subscriptionType)throw accountError('claude','subscription');
-    const output=await run(runtime,claudeArguments(provider.model),prompt,deadline);
-    if(output.is_error||output.subtype!=='success')throw accountError('claude',output.result||output.subtype);
-    result=parseTranslation(output.structured_output?JSON.stringify(output.structured_output):output.result,data);
-  }else{
-    const client=new Connection(runtime),abort=()=>client.close(new Error('번역을 중지했습니다.'));
+  {
+    const client=new Connection(runtime,{args:codexArguments(provider.fast===true)}),abort=()=>client.close(new Error('번역을 중지했습니다.'));
     deadline.addEventListener('abort',abort,{once:true});
     try{
       if(deadline.aborted)throw new Error('번역을 중지했습니다.');

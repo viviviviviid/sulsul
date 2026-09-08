@@ -20,7 +20,7 @@ globalThis.qaRelease=()=>{for(const task of qaHeld.values())task.resolve();qaHel
 globalThis.qaMaxActive=0;
 globalThis.qaMalformed=false;
 native=async(type,data,tabId,sourceUrl,scope,requestId)=>{
- if(type==='settings-get')return {maxConcurrentTranslations:4};
+ if(type==='settings-get')return {selected:'codex',maxConcurrentTranslations:4};
  if(type==='cancel'){for(const id of data?.ids || qaHeld.keys()){const task=qaHeld.get(id);if(task){qaHeld.delete(id);task.reject(new Error('번역을 중지했습니다.'));}}return {};}
  if(type!=='translate')return {};
  qaCalls.push({data,tabId,sourceUrl});
@@ -62,18 +62,18 @@ try {
  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
  await worker.evaluate(()=>qaHold=true);
  await command('sulsul-toggle');
- await until(async()=>await count()===4,'four concurrent requests');
- assert.equal(await worker.evaluate(()=>qaHeld.size),4);
- const lastText=await worker.evaluate(()=>qaCalls[3].data.blocks[0].parts.find(p=>!p.locked).text);
- await worker.evaluate(()=>[...qaHeld.values()][3].resolve());
- await until(()=>page.evaluate(text=>document.body.textContent.includes('번역: '+text),lastText),'fourth batch applies before first');
- assert.equal(await worker.evaluate(()=>qaMaxActive),4);
+ await until(async()=>await count()===3,'three prose requests; navigation waits');
+ assert.equal(await worker.evaluate(()=>qaHeld.size),3);
+ await worker.evaluate(()=>[...qaHeld.values()][2].resolve());
+ await until(async()=> (await state()).complete>0,'third batch applies before first');
+ assert.equal(await worker.evaluate(()=>qaHeld.size),2);
+ assert.equal(await worker.evaluate(()=>qaMaxActive),3);
  const early=(await state()).measurements;
  assert.ok(early.firstTextMs>=0);assert.equal(early.totalMs,null);
- const firstBatches=await worker.evaluate(()=>qaCalls.slice(0,4).map(c=>c.data.blocks.map(b=>b.id)));
+ const firstBatches=await worker.evaluate(()=>qaCalls.slice(0,3).map(c=>c.data.blocks.map(b=>b.id)));
  assert.ok(firstBatches.every(ids=>ids.length<=4));
  assert.equal(new Set(firstBatches.flat()).size,firstBatches.flat().length,'parallel batches never repeat a block');
- console.log('PASS four bounded parallel batches, out-of-order display and first-text timing');
+ console.log('PASS bounded prose-first parallel batches, out-of-order display and first-text timing');
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p id="during-request">Comment arriving while the first translation is running.</p>'));
  await worker.evaluate(()=>{qaHold=false;qaRelease();});
  await translated('#during-request');await settled();

@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { runtimeFiles, sourceFiles } from './files.mjs';
-import { copyPTY } from './pty-files.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const source=process.argv.includes('--source');
 const extension=process.argv.includes('--extension');
@@ -20,7 +19,6 @@ for(const name of extension?runtimeFiles.filter(name=>name.startsWith('extension
   if(/\.(ps1|txt)$/.test(name))text='\ufeff'+text.replace(/^\uFEFF/,'').replace(/\r?\n/g,'\r\n');
   fs.writeFileSync(target,text);
 }
-if(!source&&!extension)copyPTY(root,folder,['win32-x64','win32-arm64']);
 const zip=path.join(dist,extension?`Sulsul-Extension-${version}.zip`:source?`Sulsul-Source-${version}.zip`:`Sulsul-Windows-${version}.zip`);
 const shell=process.platform==='win32'?'powershell.exe':'pwsh';
 const temporaryZip=path.join(stage,'archive.zip');

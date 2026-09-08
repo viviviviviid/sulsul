@@ -18,9 +18,9 @@
 
 로컬 `npm run package`, `npm run package:source`, `npm run package:extension`으로 Windows·소스·확장 ZIP을 만듭니다. macOS는 ditto, Windows는 PowerShell을 사용합니다. 확장 ZIP의 최상위에 manifest.json이 있으며, 압축을 풀어 개발자 모드에서 로드할 수 있습니다. 스토어에 제출할 때는 대시보드의 실제 확장 ID와 Native Messaging의 allowed_origins도 맞춰야 합니다.
 
-macOS에서 `npm run package:macos`는 현재 빌드 머신 아키텍처의 설치 앱을 만듭니다. 공식 Node.js 24.12.0 아카이브를 SHA-256으로 확인하고 Node·node-pty·미리 컴파일한 보안 저장 도구를 포함합니다. Antigravity는 재배포하지 않고 설치 시 공식 배포처에서 SHA-512를 검증해 받습니다. 설치 후 데이터는 Application Support에 보관합니다. 앱은 로컬 ad-hoc 서명만 하며 Apple Developer ID 서명·공증은 별도 배포 설정이 필요합니다. 초기 릴리스에는 이 사실을 표시합니다.
+macOS에서 `npm run package:macos`는 현재 빌드 머신 아키텍처의 설치 앱을 만듭니다. 공식 Node.js 24.12.0 아카이브를 SHA-256으로 확인하고 Node와 미리 컴파일한 설치 프로그램을 포함합니다. Codex는 첫 계정 연결 때 공식 npm 레지스트리에서 SHA-512를 검증해 받습니다. 설치 후 데이터는 Application Support에 보관합니다. 앱은 로컬 ad-hoc 서명만 하며 Apple Developer ID 서명·공증은 별도 배포 설정이 필요합니다. 초기 릴리스에는 이 사실을 표시합니다.
 
-Windows ZIP은 node-pty의 x64/ARM64 런타임을 포함합니다. Node.js 설치와 Windows 설치 콘솔은 현재 유지하며, 로그인 화면부터는 창 없는 가상 터미널을 사용합니다. Windows 로그인 실계정 검증은 별도 Windows 환경에서 수행해야 합니다.
+Windows ZIP은 소스와 설치 스크립트를 포함합니다. Node.js 설치와 Windows 설치 콘솔은 현재 유지하며, 로그인·번역 연결 프로그램은 콘솔 창 없이 실행됩니다. 실제 ChatGPT 계정 연결은 설치 후 확인합니다.
 
 ## 포크의 확장 ID
 

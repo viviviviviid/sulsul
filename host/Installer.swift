@@ -13,7 +13,7 @@ final class Installer: NSObject, NSApplicationDelegate {
         title.font = .systemFont(ofSize: 29, weight: .semibold)
         title.frame = NSRect(x: 35, y: 335, width: 470, height: 45)
         window.contentView!.addSubview(title)
-        label = NSTextField(wrappingLabelWithString: "Chrome에서 번역할 수 있도록 이 Mac에 연결 앱을 설치합니다.\n\nGoogle 연결 프로그램은 공식 배포처에서 다운로드합니다. 설치 중에는 인터넷 연결이 필요합니다.")
+        label = NSTextField(wrappingLabelWithString: "Chrome에서 번역할 수 있도록 이 Mac에 연결 앱을 설치합니다.\n\nChatGPT 첫 연결 때 공식 연결 프로그램을 다운로드합니다.")
         label.font = .systemFont(ofSize: 15)
         label.frame = NSRect(x: 35, y: 140, width: 470, height: 180)
         window.contentView!.addSubview(label)
@@ -27,7 +27,7 @@ final class Installer: NSObject, NSApplicationDelegate {
     @objc func install() {
         guard process == nil, let resources = Bundle.main.resourceURL else { return }
         installButton.isEnabled = false
-        label.stringValue = "Google 연결 프로그램을 다운로드하고 설치하고 있어요.\n잠시만 기다려 주세요."
+        label.stringValue = "술술 연결 프로그램을 설치하고 있어요.\n잠시만 기다려 주세요."
         let payload = resources.appendingPathComponent("payload")
         let task = Process()
         task.executableURL = payload.appendingPathComponent("bin/node")
@@ -52,7 +52,7 @@ final class Installer: NSObject, NSApplicationDelegate {
         catch { process = nil; label.stringValue = "이 Mac에서 설치 앱을 실행하지 못했습니다. Mac 종류에 맞는 설치 파일을 다시 받아 주세요."; installButton.isEnabled = true }
     }
     func finished() {
-        label.stringValue = "설치했어요. 이제 Chrome에 술술을 추가해 주세요.\n\n1. Chrome 주소창에 chrome://extensions 입력\n2. 개발자 모드 → 압축해제된 확장 프로그램 로드\n3. 폴더 선택 창에서 ⌘⇧G → 아래 버튼으로 복사한 경로 붙여넣기\n\n추가 후 술술의 AI 설정에서 Google·ChatGPT·Claude 계정 또는 API를 선택하세요."
+        label.stringValue = "설치했어요. 이제 Chrome에 술술을 추가해 주세요.\n\n1. Chrome 주소창에 chrome://extensions 입력\n2. 개발자 모드 → 압축해제된 확장 프로그램 로드\n3. 폴더 선택 창에서 ⌘⇧G → 아래 버튼으로 복사한 경로 붙여넣기\n\n추가 후 술술의 ChatGPT 연결에서 공식 로그인하세요."
         installButton.title = "확장 폴더 열기"; installButton.action = #selector(reveal); installButton.isEnabled = true
         let copy = NSButton(title: "폴더 경로 복사", target: self, action: #selector(copyPath))
         copy.bezelStyle = .rounded; copy.frame = NSRect(x: 190, y: 80, width: 145, height: 38)

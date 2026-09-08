@@ -8,8 +8,7 @@ import {pipeline} from 'node:stream/promises';
 import {makeEnvironment} from './runner.mjs';
 
 export const ACCOUNT_CLIS = Object.freeze({
-  codex:{label:'ChatGPT',version:'0.153.4',binary:'codex'},
-  claude:{label:'Claude',version:'2.1.263',binary:'claude'}
+  codex:{label:'ChatGPT',version:'0.153.4',binary:'codex'}
 });
 const exec=promisify(execFile);
 export function accountPaths(config,id) {
@@ -22,16 +21,13 @@ export function accountPaths(config,id) {
 export function accountEnvironment(runtime) {
   const env=makeEnvironment(runtime);
   // Only the official child process owns these dedicated authentication stores.
-  env.CODEX_HOME=runtime.profile;env.CLAUDE_CONFIG_DIR=runtime.profile;
-  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC='1';env.DISABLE_AUTOUPDATER='1';
+  env.CODEX_HOME=runtime.profile;
   return env;
 }
 export function packageLocation(id,platform=process.platform,arch=process.arch) {
   if(!['win32','darwin','linux'].includes(platform)||!['x64','arm64'].includes(arch))throw new Error('지원하지 않는 운영체제 또는 CPU입니다.');
   const definition=ACCOUNT_CLIS[id];if(!definition)throw new Error('지원하지 않는 계정입니다.');
-  return id==='codex'
-    ? {name:'@openai/codex',version:`${definition.version}-${platform}-${arch}`}
-    : {name:`@anthropic-ai/claude-code-${platform}-${arch}`,version:definition.version};
+  return {name:'@openai/codex',version:`${definition.version}-${platform}-${arch}`};
 }
 export async function ensureAccountRuntime(config,id,signal) {
   const runtime=accountPaths(config,id);

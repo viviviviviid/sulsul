@@ -14,7 +14,7 @@ if (origin !== `chrome-extension://${config.extensionId}/`) process.exit(1);
 const active = new Map();
 let loginSession;
 const MAX_CONCURRENT_TRANSLATIONS = 4;
-const translationCapacity = () => settings.read().selected === 'antigravity' ? 1 : MAX_CONCURRENT_TRANSLATIONS;
+const translationCapacity = () => MAX_CONCURRENT_TRANSLATIONS;
 let saving = false;
 const abortAll = () => { for (const task of active.values()) task.controller.abort(); };
 function send(value) { try { process.stdout.write(encodeMessage(value)); } catch { process.exit(1); } }
@@ -32,7 +32,6 @@ async function handle(message) {
       try { return send({id,ok:true,result:await settings.save(message.data)}); }
       finally { saving = false; }
     }
-    if (message.type === 'ollama-models') return send({id,ok:true,result:await router.localModels(message.data?.endpoint)});
     if (message.type === 'cancel') {
       const ids = message.data?.ids;
       if (ids === undefined) abortAll(); // Compatibility with older extensions.
@@ -45,27 +44,22 @@ async function handle(message) {
     if (message.type === 'login') {
       if (active.size || saving) throw new Error('번역을 중지한 뒤 계정을 연결해 주세요.');
       const provider=settings.read().selected;
-      if (!['antigravity','codex','claude'].includes(provider)) throw new Error('AI 설정에서 계정 연결 방식을 선택해 주세요.');
-      if (provider==='antigravity'&&!router.health().installed) throw new Error('술술 설치 프로그램에서 Antigravity 설치를 선택해 주세요.');
       if (!loginSession?.active) {
         // Mark busy before the dynamic import so simultaneous starts cannot fork
         // two authentication sessions or race a settings write.
         saving=true;
         try {
           const verify=signal=>router.translate({blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]},signal);
-          if(provider==='antigravity'){
-            const {LoginSession}=await import('./login-session.mjs');loginSession=new LoginSession(config,verify);
-          }else{
-            const {AccountLoginSession}=await import('./account-login.mjs');loginSession=new AccountLoginSession(config,provider,verify);
-          }
+          const {AccountLoginSession}=await import('./account-login.mjs');
+          loginSession=new AccountLoginSession(config,provider,verify);
           void loginSession.start();
         } finally {saving=false;}
       }
       return send({id,ok:true,result:loginSession.snapshot()});
     }
-    if (['login-status','login-code','login-cancel'].includes(message.type)) {
+    if (['login-status','login-cancel'].includes(message.type)) {
       if (!loginSession || message.data?.sessionId !== loginSession.id) throw new Error('계정 연결 시간이 지났습니다. 다시 연결해 주세요.');
-      const result=message.type==='login-code'?loginSession.submit(message.data.code):message.type==='login-cancel'?loginSession.cancel():loginSession.snapshot();
+      const result=message.type==='login-cancel'?loginSession.cancel():loginSession.snapshot();
       return send({id,ok:true,result});
     }
     if (!['translate','provider-test'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');

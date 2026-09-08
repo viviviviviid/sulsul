@@ -24,14 +24,14 @@ async function init() {
   } else $('button-text').textContent = '웹페이지에서 열어 주세요';
   try {
     const status = await rpc('health');
-    $('model-name').textContent = status.modelLabel || 'Gemini · 기본 설정';
+    $('model-name').textContent = status.modelLabel || 'ChatGPT · 기본 모델';
     $('model-name').title = status.model || '';
     $('connection-text').textContent = status.message;
     $('connection-dot').className = 'status-dot ' + (status.loginCached ? 'ready' : 'error');
-    const account = {antigravity:'Google',codex:'ChatGPT',claude:'Claude'}[status.provider];
+    const account = status.provider==='codex'?'ChatGPT':null;
     $('login').hidden = !account;
     $('login').textContent = account + (status.loginCached ? ' 계정 다시 연결' : ' 계정 연결');
-    if (!status.installed) $('setup').hidden = false;
+    if (!account) {$('connection-text').textContent='ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.';$('setup').hidden=false;}
   } catch(e) {
     $('connection-text').textContent = e.message;
     $('connection-dot').className = 'status-dot error'; $('setup').hidden = false;

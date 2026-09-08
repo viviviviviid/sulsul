@@ -1,19 +1,20 @@
 import {randomUUID} from 'node:crypto';
-import {spawn} from 'node:child_process';
-import {ensureAccountRuntime,accountEnvironment,ACCOUNT_CLIS} from './account-runtime.mjs';
+import {ensureAccountRuntime,ACCOUNT_CLIS} from './account-runtime.mjs';
 import {CodexConnection,accountError} from './account-providers.mjs';
 
 export function accountLoginURL(id,value) {
+  if(id!=='codex')return null;
   try{
     const url=new URL(value);
-    const origins=id==='codex'?['https://auth.openai.com','https://chatgpt.com']:['https://claude.ai','https://platform.claude.com','https://console.anthropic.com'];
+    const origins=['https://auth.openai.com','https://chatgpt.com'];
     if(url.protocol==='https:'&&!url.username&&!url.password&&origins.includes(url.origin))return url.href;
   }catch{}
   return null;
 }
 export class AccountLoginSession {
-  constructor(config,provider,verify,{ensure=ensureAccountRuntime,Connection=CodexConnection,spawnProcess=spawn,timeoutMs=600_000}={}) {
-    this.config=config;this.provider=provider;this.verify=verify;this.ensure=ensure;this.Connection=Connection;this.spawnProcess=spawnProcess;this.timeoutMs=timeoutMs;
+  constructor(config,provider,verify,{ensure=ensureAccountRuntime,Connection=CodexConnection,timeoutMs=600_000}={}) {
+    if(provider!=='codex')throw new Error('술술은 ChatGPT 계정 연결만 지원합니다.');
+    this.config=config;this.provider=provider;this.verify=verify;this.ensure=ensure;this.Connection=Connection;this.timeoutMs=timeoutMs;
     this.id=randomUUID();this.state='starting';this.label=ACCOUNT_CLIS[provider].label;
     this.message=`공식 ${this.label} 연결 프로그램을 준비하고 있어요. 첫 연결은 다운로드가 필요합니다.`;
     this.controller=new AbortController();
@@ -39,16 +40,6 @@ export class AccountLoginSession {
         this.loginId=login.loginId;this.url=accountLoginURL('codex',login.authUrl);
         if(!this.url)throw accountError('codex');
         if(this.completion)completed(this.completion);
-      }else{
-        const child=this.child=this.spawnProcess(runtime.cli,['auth','login'],{cwd:runtime.workspace,env:accountEnvironment(runtime),shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
-        let buffer='';const consume=chunk=>{
-          buffer=(buffer+chunk).slice(-16384);
-          for(const value of buffer.match(/https:\/\/[^\s\x1b]+/g)||[]){const url=accountLoginURL('claude',value);if(url)this.url=url;}
-        };
-        child.stdin.on('error',()=>{});child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');
-        child.stdout.on('data',consume);child.stderr.on('data',consume);
-        child.on('error',()=>this.fail('Claude 로그인 프로그램을 실행하지 못했습니다.'));
-        child.on('close',code=>{if(this.state==='waiting'){code===0?void this.check():this.fail('Claude 로그인을 완료하지 못했습니다. 공식 로그인 창에서 다시 연결해 주세요.');}});
       }
       if(!this.active||this.state==='verifying')return;
       this.state='waiting';this.message=`${this.label} 공식 로그인 창에서 연결을 완료해 주세요. 완료되면 이 화면에 자동으로 반영됩니다.`;
@@ -62,9 +53,9 @@ export class AccountLoginSession {
       await this.verify(AbortSignal.any([this.controller.signal,AbortSignal.timeout(60_000)]));
       if(this.controller.signal.aborted)return;
       this.state='connected';this.message=`${this.label} 계정을 연결했어요. 이제 번역을 시작할 수 있습니다.`;this.cleanup();
-    }catch{if(this.active)this.fail(`${this.label} 로그인 또는 모델 접근을 확인하지 못했습니다. AI 설정에서 연결 테스트를 실행해 주세요.`);}
+    }catch(error){if(this.active)this.fail(error.message||'ChatGPT 연결을 확인하지 못했습니다. 다시 연결해 주세요.');}
   }
-  dispose(){this.url=null;this.client?.close();this.client=null;try{this.child?.kill();}catch{}this.child=null;}
+  dispose(){this.url=null;this.client?.close();this.client=null;}
   cleanup(){clearTimeout(this.timer);this.dispose();}
   fail(message){if(!this.active)return;this.state='failed';this.message=message;this.controller.abort();this.cleanup();}
   cancel(){if(this.active){this.state='canceled';this.message='계정 연결을 취소했어요.';this.controller.abort();this.cleanup();}return this.snapshot();}

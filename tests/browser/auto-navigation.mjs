@@ -20,7 +20,7 @@ globalThis.qaHeld=new Map();
 globalThis.qaRelease=()=>{for(const task of qaHeld.values())task.resolve();qaHeld.clear();};
 globalThis.qaMaxActive=0;
 native=async(type,data,tabId,sourceUrl,scope,requestId)=>{
- if(type==='settings-get')return {maxConcurrentTranslations:2};
+ if(type==='settings-get')return {selected:'codex',maxConcurrentTranslations:2};
  if(type==='cancel'){for(const id of data?.ids || qaHeld.keys()){const task=qaHeld.get(id);if(task){qaHeld.delete(id);task.reject(new Error('번역을 중지했습니다.'));}}return {};}
   if(type!=='translate')return {};
   qaCalls.push({data,tabId,sourceUrl});

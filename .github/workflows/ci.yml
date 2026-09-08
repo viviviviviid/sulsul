@@ -23,7 +23,7 @@ jobs:
       - run: npm run check
       - if: runner.os == 'Windows'
         shell: pwsh
-        run: ./install.ps1 -WithoutAntigravity -SkipRegister
+        run: ./install.ps1 -SkipRegister
       - run: npm test
       - if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium

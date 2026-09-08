@@ -1,49 +1,20 @@
 const $=id=>document.getElementById(id);
-let sessionId, timer, submitted=false, busy=false;
-async function rpc(type,data) {
-  const reply=await chrome.runtime.sendMessage({type,data});
-  if(!reply?.ok)throw new Error(reply?.error || '연결 프로그램을 확인해 주세요.');
-  return reply.result;
-}
-function failure(error) {
-  clearTimeout(timer);$('fields').disabled=true;$('code').value='';$('google').hidden=true;
-  $('status').textContent=error.message;$('status').className='error';$('retry').hidden=false;
-}
-function render(result) {
-  if(!result?.sessionId || !result.state)throw new Error('새 로그인 화면을 사용하려면 술술 연결 프로그램을 업데이트해 주세요.');
+let sessionId,timer;
+async function rpc(type,data){const reply=await chrome.runtime.sendMessage({type,data});if(!reply?.ok)throw new Error(reply?.error||'연결 프로그램을 확인해 주세요.');return reply.result;}
+function failure(error){clearTimeout(timer);$('connection').hidden=true;$('signin').hidden=true;$('status').textContent=error.message;$('status').className='error';$('retry').hidden=false;}
+function render(result){
+  if(!result?.sessionId||result.provider!=='codex'||result.flow!=='browser')throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');
   sessionId=result.sessionId;$('status').textContent=result.message;$('status').className=result.state==='failed'?'error':'';
-  const provider=result.provider || 'antigravity';
-  const label={antigravity:'Google',codex:'ChatGPT',claude:'Claude'}[provider];
-  if(!label)throw new Error('지원하지 않는 계정 연결입니다.');
-  const browser=result.flow==='browser';
-  $('heading').textContent=label+' 계정으로 연결해요.';
-  $('intro').textContent=browser?'공식 로그인 창에서 연결을 완료하면 이 화면에 자동으로 반영됩니다.':'Google에서 로그인하고, 표시되는 인증 코드를 여기 붙여넣어 주세요.';
-  $('code-fields').hidden=browser;$('code').required=!browser;
-  const waiting=result.state==='waiting';
-  $('fields').disabled=!waiting || submitted;
-  $('cancel').disabled=false;
-  $('retry').hidden=!['failed','canceled'].includes(result.state);
-  $('done').hidden=result.state!=='connected';
-  $('google').hidden=true;
-  if(waiting && result.url && !submitted) {
+  $('retry').hidden=!['failed','canceled'].includes(result.state);$('done').hidden=result.state!=='connected';$('signin').hidden=true;
+  if(result.state==='waiting'&&result.url){
     const url=new URL(result.url);
-    const origins={antigravity:['https://accounts.google.com'],codex:['https://auth.openai.com','https://chatgpt.com'],claude:['https://claude.ai','https://platform.claude.com','https://console.anthropic.com']}[provider];
-    if(!origins.includes(url.origin) || url.username || url.password)throw new Error('공식 로그인 주소를 확인하지 못했습니다.');
-    $('google').href=url.href;$('google').textContent=label+' 로그인 열기 ↗';$('google').hidden=false;
+    if(!['https://auth.openai.com','https://chatgpt.com'].includes(url.origin)||url.username||url.password)throw new Error('공식 로그인 주소를 확인하지 못했습니다.');
+    $('signin').href=url.href;$('signin').hidden=false;
   }
-  if(['starting','waiting','verifying'].includes(result.state))timer=setTimeout(poll,1000);
-  else {$('code').value='';$('connection').hidden=true;}
+  if(['starting','waiting','verifying'].includes(result.state))timer=setTimeout(poll,1000);else $('connection').hidden=true;
 }
 async function poll(){try{render(await rpc('login-status',{sessionId}));}catch(error){failure(error);}}
-async function start(){
-  clearTimeout(timer);submitted=false;$('code').value='';$('fields').disabled=true;$('connection').hidden=false;$('retry').hidden=true;$('done').hidden=true;
-  try{render(await rpc('login'));}catch(error){failure(error);}
-}
-$('connection').addEventListener('submit',async event=>{
-  event.preventDefault();if(busy || submitted)return;busy=true;clearTimeout(timer);$('fields').disabled=true;
-  let code=$('code').value.trim();$('code').value='';
-  try{const result=await rpc('login-code',{sessionId,code});submitted=true;render(result);}catch(error){failure(error);}finally{code='';busy=false;}
-});
+async function start(){clearTimeout(timer);$('connection').hidden=false;$('signin').hidden=true;$('retry').hidden=true;$('done').hidden=true;
+  try{const settings=await rpc('settings-get');if(settings.selected!=='codex')throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');render(await rpc('login'));}catch(error){failure(error);}}
 $('cancel').addEventListener('click',async()=>{clearTimeout(timer);try{render(await rpc('login-cancel',{sessionId}));}catch(error){failure(error);}});
-$('retry').addEventListener('click',start);
-start();
+$('retry').addEventListener('click',start);start();

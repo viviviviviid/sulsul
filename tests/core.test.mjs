@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPrompt, parseTranslation, encodeMessage, createDecoder } from '../host/core.mjs';
-import { makeEnvironment, readableError } from '../host/runner.mjs';
+import { makeEnvironment } from '../host/runner.mjs';
 const request = {blocks:[{id:'b0',parts:[{id:'t0',text:'Call ',locked:false},{id:'t1',text:'lzReceive()',locked:true},{id:'t2',text:' after verification.',locked:false}]}]};
 test('full sentence can be distributed around a locked code node',()=>{
   const result = parseTranslation(JSON.stringify({blocks:[{id:'b0',parts:[{id:'t0',text:'검증 후 '},{id:'t2',text:'를 호출합니다.'}]}]}),request);
@@ -38,8 +38,4 @@ test('API credentials and arbitrary Node startup options do not enter CLI enviro
     assert.equal(env.HOME,'P');assert.equal(env.XDG_CONFIG_HOME,'P/.config');
     assert.notEqual(process.env.HOME,'P');
   }
-});
-test('quota failures cannot silently switch to paid API',()=>assert.match(readableError('429 RESOURCE_EXHAUSTED quota exceeded'),/전환하지/));
-test('retired consumer login is reported as a migration error, not a retry-login error',()=>{
-  assert.match(readableError('Failed to sign in: This client is no longer supported. Please migrate to Antigravity'),/지원이 종료/);
 });

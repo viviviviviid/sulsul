@@ -20,7 +20,7 @@ test('section links keep an active translation, but a different document cancels
   vm.runInContext(readFileSync(new URL('../extension/background.js',import.meta.url),'utf8'),context);
   const task=context.translate({},7,'https://docs.example.com/guide?version=2#start').catch(e=>e);
   await Promise.resolve();
-  callbacks.nativeMessage({id:sent[0].id,ok:true,result:{scope:'test'}});
+  callbacks.nativeMessage({id:sent[0].id,ok:true,result:{selected:'codex',scope:'test'}});
   const end=Date.now()+2000;
   while(!sent.some(m=>m.type==='translate')){
     if(Date.now()>end)assert.fail('translation did not start');

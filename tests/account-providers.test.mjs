@@ -4,16 +4,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
-import {PassThrough} from 'node:stream';
 import {accountPaths,accountEnvironment,packageLocation} from '../host/account-runtime.mjs';
-import {translateAccount,claudeArguments,codexArguments,accountError} from '../host/account-providers.mjs';
+import {translateAccount,codexArguments,accountError} from '../host/account-providers.mjs';
 import {AccountLoginSession,accountLoginURL} from '../host/account-login.mjs';
 
 const data={blocks:[{id:'b0',parts:[{id:'t0',text:'Read this paragraph.',locked:false}]}]};
 const output={blocks:[{id:'b0',parts:[{id:'t0',text:'이 문단을 읽어 보세요.'}]}]};
 function fixture(){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-accounts-')),config={schema:path.join(root,'host','translation.schema.json')};
-  for(const id of ['codex','claude']){
+  for(const id of ['codex']){
     const runtime=accountPaths(config,id);for(const dir of [runtime.workspace,runtime.profile,path.dirname(runtime.cli)])fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(runtime.cli,'test');
   }
   return {config,dispose(){fs.rmSync(root,{recursive:true,force:true});}};
@@ -24,38 +23,18 @@ test('account runtimes isolate credentials and never inherit API keys or user ho
   const f=fixture();
   try{
     const runtime=accountPaths(f.config,'codex'),env=accountEnvironment(runtime);
-    assert.equal(env.CODEX_HOME,runtime.profile);assert.equal(env.CLAUDE_CONFIG_DIR,runtime.profile);
+    assert.equal(env.CODEX_HOME,runtime.profile);assert.equal(env.CLAUDE_CONFIG_DIR,undefined);
     for(const name of ['OPENAI_API_KEY','ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','CLAUDE_CODE_OAUTH_TOKEN','NODE_OPTIONS','BASH_ENV'])assert.equal(env[name],undefined);
-    assert.notEqual(accountPaths(f.config,'claude').profile,runtime.profile);
+    assert.throws(()=>accountPaths(f.config,'claude'),/지원하지/);
     assert.match(packageLocation('codex','darwin','arm64').version,/-darwin-arm64$/);
-    assert.match(packageLocation('claude','win32','x64').name,/-win32-x64$/);
-    const args=claudeArguments('sonnet');assert.equal(args[args.indexOf('--tools')+1],'');assert.equal(args[args.indexOf('--disallowedTools')+1],'mcp__*');
-    assert.ok(args.includes('--no-session-persistence'));assert.ok(codexArguments().includes('forced_login_method="chatgpt"'));
-  }finally{f.dispose();}
-});
-
-test('Claude uses subscription auth, normalized fragments, and refuses API credentials',async()=>{
-  const f=fixture(),calls=[];
-  try{
-    const run=async(runtime,args,input)=>{
-      calls.push({args,input});
-      return args[0]==='auth'?{loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'max'}:{subtype:'success',is_error:false,structured_output:output};
-    };
-    assert.deepEqual((await translateAccount(f.config,{id:'claude',model:'sonnet'},data,null,{run})).blocks,output.blocks);
-    assert.match(calls[1].input,/DOCUMENT_DATA/);
-    assert.ok(!calls[1].args.some(a=>a.includes(data.blocks[0].parts[0].text)),'page text travels over stdin');
-    let translated=false;
-    await assert.rejects(translateAccount(f.config,{id:'claude',model:'sonnet'},data,null,{run:async(r,args)=>{
-      if(args[0]!=='auth')translated=true;
-      return {loggedIn:true,authMethod:'api_key',apiProvider:'firstParty'};
-    }}),/계정 연결/);assert.equal(translated,false);
-    await assert.rejects(translateAccount(f.config,{id:'claude',model:'sonnet'},data,null,{run:async(r,args)=>args[0]==='auth'?{loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'max'}:{subtype:'error_max_turns'}}),/확인하지 못/);
+    assert.ok(codexArguments().includes('forced_login_method="chatgpt"'));
   }finally{f.dispose();}
 });
 
 test('Codex translates a fresh ephemeral read-only thread and validates auth',async()=>{
-  const f=fixture(),requests=[];
+  const f=fixture(),requests=[],launches=[];
   class Connection extends EventEmitter{
+    constructor(runtime,options){super();launches.push(options.args);}
     async initialize(){}
     async request(method,params){requests.push({method,params});
       if(method==='account/read')return {account:{type:'chatgpt'}};
@@ -71,6 +50,10 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
   }
   try{
     assert.deepEqual((await translateAccount(f.config,{id:'codex',model:'default'},data,null,{Connection})).blocks,output.blocks);
+    assert.ok(launches[0].includes('features.fast_mode=false'));
+    await translateAccount(f.config,{id:'codex',model:'default',fast:true},data,null,{Connection});
+    assert.ok(launches[1].includes('features.fast_mode=true'));
+    assert.ok(launches[1].includes('service_tier="fast"'));
     const thread=requests.find(r=>r.method==='thread/start').params;
     assert.equal(thread.ephemeral,true);assert.equal(thread.sandbox,'read-only');assert.equal(thread.approvalPolicy,'never');assert.equal(thread.model,null);
     const turn=requests.find(r=>r.method==='turn/start').params;
@@ -85,10 +68,10 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
 
 test('account login URLs stay on official origins and raw errors never expose credentials',()=>{
   assert.ok(accountLoginURL('codex','https://auth.openai.com/authorize?state=example'));
-  assert.ok(accountLoginURL('claude','https://claude.ai/oauth/authorize?state=example'));
-  for(const url of ['https://claude.ai.evil.test/','http://claude.ai/','https://user:password@claude.ai/'])assert.equal(accountLoginURL('claude',url),null);
+  assert.equal(accountLoginURL('claude','https://claude.ai/oauth/authorize?state=example'),null);
+  for(const url of ['https://auth.openai.com.evil.test/','http://auth.openai.com/','https://user:password@auth.openai.com/'])assert.equal(accountLoginURL('codex',url),null);
   assert.equal(accountLoginURL('codex','https://claude.ai/'),null);
-  assert.ok(!accountError('claude','quota FAKE_SECRET').message.includes('FAKE_SECRET'));
+  assert.ok(!accountError('codex','quota FAKE_SECRET').message.includes('FAKE_SECRET'));
 });
 
 test('ChatGPT login waits for official completion and a fresh verification; cancel stops it',async()=>{
@@ -113,22 +96,17 @@ test('ChatGPT login waits for official completion and a fresh verification; canc
   await canceled.start();canceled.cancel();client.emit('notification','account/login/completed',{loginId:'login-1',success:true});assert.equal(canceled.state,'canceled');
 });
 
-test('Claude login uses the official process, verifies success and cleans up on timeout',async()=>{
-  let child,verified=0,invocation;
-  const spawnProcess=(command,args,options)=>{
-    invocation={command,args,options};child=new EventEmitter();
-    for(const name of ['stdin','stdout','stderr'])child[name]=new PassThrough();
-    child.kill=()=>{child.killed=true;};return child;
-  };
-  const options={ensure:async()=>({cli:'official-claude',profile:os.tmpdir(),workspace:os.tmpdir()}),spawnProcess};
-  const session=new AccountLoginSession({},'claude',async()=>{verified++;},options);
-  try{
-    await session.start();assert.deepEqual(invocation.args,['auth','login']);assert.equal(invocation.options.shell,false);
-    child.stdout.write('Open https://claude.ai/oauth/authorize?state=test\n');
-    assert.match(session.snapshot().url,/^https:\/\/claude\.ai\//);
-    child.emit('close',0);await until(()=>session.state==='connected');assert.equal(verified,1);assert.equal(child.killed,true);
-  }finally{session.cancel();}
-  const timeout=new AccountLoginSession({},'claude',async()=>assert.fail('timed-out login verified'),{...options,timeoutMs:20});
-  await timeout.start();await until(()=>timeout.state==='failed');assert.equal(child.killed,true);
-  child.emit('close',0);assert.equal(timeout.state,'failed');
+test('ChatGPT login timeout and quota verification errors remain actionable',async()=>{
+  let client;
+  class Connection extends EventEmitter{
+    constructor(){super();client=this;}
+    async initialize(){}
+    async request(method){return method==='account/read'?{account:null}:{loginId:'login',authUrl:'https://auth.openai.com/authorize'};}
+    close(){this.closed=true;this.emit('closed');}
+  }
+  const options={ensure:async()=>({}),Connection};
+  const timeout=new AccountLoginSession({},'codex',async()=>assert.fail('expired login verified'),{...options,timeoutMs:20});
+  await timeout.start();await until(()=>timeout.state==='failed');assert.equal(client.closed,true);
+  const failed=new AccountLoginSession({},'codex',async()=>{throw accountError('codex','429 quota');},options);
+  try{await failed.start();client.emit('notification','account/login/completed',{loginId:'login',success:true});await until(()=>failed.state==='failed');assert.match(failed.snapshot().message,/사용 한도/);assert.equal(failed.snapshot().url,undefined);}finally{failed.cancel();}
 });

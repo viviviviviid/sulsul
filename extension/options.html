@@ -1,33 +1,31 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>술술 · AI 설정</title><link rel="stylesheet" href="options.css"></head>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>술술 · ChatGPT 설정</title><link rel="stylesheet" href="options.css"></head>
 <body><main>
-  <header><a href="setup.html" class="wordmark">술술<span>●</span></a><span>AI SETTINGS</span></header>
-  <h1>읽는 방식은 그대로.<br>AI는 내가 고르기.</h1>
-  <p class="intro">번역할 때 사용할 AI와 모델을 설정하세요.</p>
-  <form id="settings">
-    <fieldset id="fields" disabled>
-      <label for="provider">어떤 AI로 읽을까요?</label>
-      <select id="provider" required></select>
-      <p id="provider-note" class="note"></p>
-      <label for="model">모델</label><input id="model" list="models" maxlength="160" required spellcheck="false" autocomplete="off"><datalist id="models"></datalist>
-      <p class="help">기본 모델을 쓰거나, 내 계정에서 이용 가능한 모델 ID로 바꿀 수 있어요.</p>
-      <div id="endpoint-fields" hidden>
-        <label for="endpoint">Ollama 주소</label><input id="endpoint" type="url" value="http://127.0.0.1:11434" spellcheck="false">
-        <button id="load-models" class="quiet" type="button">설치한 모델 불러오기</button>
-      </div>
-      <div id="key-fields" hidden>
-        <label for="api-key">API 키 <span id="key-state"></span></label>
-        <input id="api-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false" placeholder="여기에 붙여넣기">
-        <label class="checkbox"><input id="clear-key" type="checkbox">이 AI의 저장된 키 삭제</label>
-        <p class="help">키를 비워 두면 기존 키를 유지해요. 이 PC의 운영체제 보안 저장소를 이용해 암호화합니다.</p>
-        <a id="key-link" target="_blank" rel="noreferrer">API 키 발급 안내 ↗</a>
-      </div>
-      <div class="actions"><button id="save" class="primary" type="submit">이 AI로 저장</button><button id="test" type="button">연결 테스트</button><button id="login" type="button" hidden>Google 계정 연결</button></div>
-    </fieldset>
-  </form>
-  <p id="status" role="status" aria-live="polite">연결 프로그램을 확인하고 있어요.</p>
-  <p class="footnote">저장하면 열려 있는 술술 번역이 일시중지됩니다. 페이지의 ‘이어 읽기’를 눌러 주세요.<br>연결 테스트는 짧은 예문을 한 번 번역하며, API 선택 시 사용량에 포함됩니다.</p>
-  <details><summary>어떤 내용이 AI에 전달되나요?</summary><p>읽기를 켠 페이지의 번역 대상 텍스트와 주변 문맥, 페이지 제목·주소를 선택한 AI에 보냅니다. 술술 자체 서버는 없습니다. 번역 결과는 이 Chrome 프로필에 저장되며 팝업에서 지울 수 있어요. Ollama는 내려받은 로컬 모델만 지원합니다.</p></details>
-  <footer><a href="setup.html">설치 · 문제 해결</a><span>술술 · MIT Open Source</span></footer>
-  <script src="options.js"></script>
-</main></body></html>
+<header><a href="setup.html" class="wordmark">술술<span>●</span></a><span>CHATGPT</span></header>
+<h1>ChatGPT로 연결하고,<br>술술 읽어요.</h1>
+<p class="intro">내 ChatGPT 계정으로 읽던 페이지를 쉽게 번역해요.</p>
+<form id="settings"><fieldset id="fields" disabled>
+<p class="note">계정의 Codex 이용 한도가 적용됩니다. 연결 프로그램은 첫 로그인 때 자동으로 준비해요.</p>
+<div class="actions"><button id="login" class="primary" type="button">ChatGPT 연결</button><button id="test" type="button">연결 확인</button></div>
+<details open><summary>모델 설정</summary>
+<label for="model-choice">번역 모델</label>
+<select id="model-choice">
+<option value="default">자동 · 계정 기본 모델</option>
+<option value="gpt-5.6-luna">GPT-5.6 Luna · 루나</option>
+<option value="gpt-5.6-terra">GPT-5.6 Terra · 테라</option>
+<option value="gpt-5.6-sol">GPT-5.6 Sol · 솔</option>
+<option value="gpt-6-astra">GPT-6 Astra · 아스트라</option>
+<option value="gpt-5.3-codex-spark">GPT-5.3 Codex Spark · 스파크</option>
+<option value="custom">직접 입력</option>
+</select>
+<div id="custom-model" hidden><label for="model">모델 ID</label><input id="model" maxlength="160" required spellcheck="false" autocomplete="off" value="default"></div>
+<p class="help">계정에서 이용 가능한 모델만 사용할 수 있어요. 저장 후 ‘연결 확인’으로 확인해 주세요.</p>
+<label class="checkbox"><input id="fast" type="checkbox">Fast 모드</label>
+<p class="help">지원되는 모델에서 더 빠르게 번역해요. GPT-5.6 기준 속도 약 1.5배, 사용량 차감 2.5배입니다. 모델·계정에 따라 지원 여부가 달라요. Low는 그대로 적용됩니다.</p>
+<button id="save" type="submit">모델 저장</button>
+</details></fieldset></form>
+<p id="status" role="status" aria-live="polite">연결 프로그램을 확인하고 있어요.</p>
+<p class="footnote">모델을 저장하면 진행 중인 번역이 일시중지됩니다. 페이지에서 ‘이어 읽기’를 눌러 주세요.<br>연결 확인은 짧은 예문을 한 번 번역하며 계정 사용량에 포함됩니다.</p>
+<details><summary>어떤 내용이 전달되나요?</summary><p>읽기를 켠 페이지의 번역 대상 텍스트와 주변 문맥, 페이지 제목·주소를 ChatGPT 연결을 통해 OpenAI에 보냅니다. 술술 자체 서버는 없습니다. 번역 결과는 이 Chrome 프로필에 저장되며 팝업에서 지울 수 있어요.</p></details>
+<footer><a href="setup.html">설치 · 문제 해결</a><span>술술 · MIT Open Source</span></footer>
+<script src="options.js"></script></main></body></html>

@@ -46,6 +46,22 @@
   function collect() {
     const groups = new Map();
     const reading = new Map();
+    const inferred = new WeakSet(), checked = new WeakSet();
+    const navigation = 'nav,aside,header,footer,[role="navigation"],[role="complementary"],[role="banner"],[role="contentinfo"]';
+    // Infer prose containers only from text density and geometry together.
+    for (const paragraph of document.querySelectorAll('p')) {
+      if (paragraph.closest(navigation)) continue;
+      let parent = paragraph.parentElement;
+      for (let depth=0; parent && parent!==document.body && depth<4; depth++,parent=parent.parentElement) {
+        if (checked.has(parent)) continue;
+        checked.add(parent);
+        const box=parent.getBoundingClientRect();
+        if (box.width<Math.min(320,innerWidth*.5) || box.left>innerWidth*.6 || box.right<innerWidth*.4 || parent.querySelector(navigation)) continue;
+        const prose=[...parent.querySelectorAll('p')].reduce((n,p)=>n+p.textContent.trim().length,0);
+        const links=[...parent.querySelectorAll('a')].reduce((n,a)=>n+a.textContent.trim().length,0);
+        if (prose>=240 && links<prose*.4) inferred.add(parent);
+      }
+    }
     const walk = (node, primary = null, fallback = null, locked = false, canRead = false, textVisible = true) => {
       if (node.nodeType === Node.TEXT_NODE) {
         if ((!node.data.trim() && !knownParts.has(node)) || !textVisible) return;
@@ -67,8 +83,8 @@
         textVisible = !['hidden', 'collapse'].includes(style.visibility);
         locked = locked || node.matches(LOCKED);
         if (node.matches(BLOCKS)) primary = node;
-        if (node.matches('main,article,[role="main"],[role="article"]')) canRead = true;
-        if (node.matches('nav,[role="navigation"]')) canRead = false;
+        if (node.matches('main,article,[role="main"],[role="article"]') || inferred.has(node)) canRead = true;
+        if (node.matches(navigation)) canRead = false;
         if (node.matches('div,section,article,main,li,a,button,label,summary,legend,[role="button"],[role="tab"],[role="menuitem"]') || node.localName.includes('-') || !fallback) fallback = node;
         if (node.tagName === 'SLOT') {
           const assigned = node.assignedNodes({ flatten: true });
@@ -99,7 +115,7 @@
       const old = previous.get(element);
       if (old && reusable.has(old)) {
         if (/^H[1-6]$/.test(element.tagName)) heading = old.parts.map(p => p.original).join('');
-        result.push(old); continue;
+        old.reading=reading.get(element);result.push(old); continue;
       }
       const parts = group.map((p,i) => ({ ...p, id: `t${i}`, original: p.node.data }));
       const text = parts.map(p => p.original).join('');
@@ -371,19 +387,23 @@
   }
 
   function nextBatch() {
-    const pending = records.filter(r => r.status === 'new').map(r => {
+    const ranked = records.filter(r => r.status === 'new' || r.status === 'pending').map(r => {
       const box = r.element.getBoundingClientRect();
-      const onScreen = box.bottom >= 0 && box.top <= innerHeight;
-      return { record:r, priority:onScreen ? (r.reading ? 0 : 1) : 2, distance:onScreen ? 0 : Math.abs(box.top) };
+      const onScreen = box.bottom >= 0 && box.top <= innerHeight && box.right>0 && box.left<innerWidth;
+      const nearby = box.top>innerHeight && box.top<=innerHeight*2;
+      return { record:r, priority:r.reading && onScreen ? 0 : r.reading && nearby ? 1 : onScreen ? 2 : 3, distance:onScreen ? Math.max(0,box.top) : Math.abs(box.top) };
     }).sort((a,b) => a.priority-b.priority || a.distance-b.distance);
+    const pending=ranked.filter(r=>r.record.status==='new');
     if (!pending.length) return [];
-    const visible = pending[0].priority < 2;
+    // Finish the visible/nearby prose before allowing menus to occupy slots.
+    if (pending[0].priority>=2 && ranked.some(r=>r.priority<2 && r.record.status==='pending')) return [];
+    const visible = pending[0].priority < 3;
     const blockLimit = !complete ? 4 : visible ? 8 : 18;
     const charLimit = !complete ? 1800 : visible ? 3200 : 7000;
     const current = []; let size=0, fragments=0;
     for (const {record,priority} of pending) {
       const n = record.parts.reduce((v,p) => v+p.original.length,0);
-      if (current.length && (current.length >= blockLimit || size+n > charLimit || fragments+record.parts.length > 1200 || (visible && priority === 2))) break;
+      if (current.length && (current.length >= blockLimit || size+n > charLimit || fragments+record.parts.length > 1200 || priority!==pending[0].priority)) break;
       current.push(record); size+=n; fragments+=record.parts.length;
     }
     return current;

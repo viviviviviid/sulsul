@@ -19,7 +19,7 @@ export function validateRequest(data) {
   return data;
 }
 
-export function buildPrompt(data, { cli = true } = {}) {
+export function buildPrompt(data, { cli = false } = {}) {
   validateRequest(data);
   return `You are the Korean editor for Sulsul, an in-place browser translator for everyday webpages, social feeds, posts, comments, articles, and technical documentation.
 The user wants to read every source block fluently in Korean, with all facts and meaning preserved. Blocks may belong to unrelated posts or different authors: translate each independently, without merging their claims or voices. Context is for disambiguation, not permission to add information from another post.

@@ -13,13 +13,13 @@ function worker(maxConcurrentTranslations=2){
   const port={onMessage:event('nativeMessage'),onDisconnect:event('disconnect'),postMessage(message){
     calls.push(message);events.push(message.type);
     const answer=result=>queueMicrotask(()=>callbacks.nativeMessage({id:message.id,ok:true,result}));
-    if(message.type==='settings-get')answer({scope,maxConcurrentTranslations});
+    if(message.type==='settings-get')answer({selected:'codex',scope,maxConcurrentTranslations});
     else if(message.type==='translate'||message.type==='provider-test'){
       sequence++;
       if(message.data?.hold||message.type==='provider-test')held.set(message.id,()=>{held.delete(message.id);events.push('canceled-translation-finished');answer({blocks:[]});});
       else answer({blocks:[],sequence});
     }else if(message.type==='cancel'){answer({});setTimeout(()=>{for(const id of message.data?.ids || held.keys())held.get(id)?.();},20);}
-    else if(message.type==='settings-save'){scope='second';if(message.data.provider==='antigravity')maxConcurrentTranslations=1;answer({scope});}
+    else if(message.type==='settings-save'){scope='second';answer({scope});}
   }};
   const context=vm.createContext({URL,crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
     runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
@@ -34,7 +34,7 @@ function worker(maxConcurrentTranslations=2){
 test('provider switch cancels and drains translation before saving, and pauses the reader',async()=>{
   const w=worker();await w.context.setReader(7,'https://example.com/page','running');
   const pending=w.context.native('translate',{hold:true},7,'https://example.com/page');
-  await w.context.saveProvider({provider:'openai'});await pending;
+  await w.context.saveProvider({provider:'codex'});await pending;
   assert.equal(w.sessions['reader:7'].mode,'paused');
   assert.ok(w.events.indexOf('canceled-translation-finished')<w.events.indexOf('settings-save'));
   assert.ok(w.events.includes('sulsul-provider-changed'));
@@ -44,7 +44,7 @@ test('provider and model scopes prevent reusing a previous AI cache',async()=>{
   const first=await w.context.translate(request,7,'https://example.com/page');
   const cached=await w.context.translate(request,7,'https://example.com/page');
   assert.equal(first.sequence,1);assert.equal(cached.cached,true);
-  await w.context.saveProvider({provider:'openai'});
+  await w.context.saveProvider({provider:'codex'});
   await assert.rejects(w.context.translate(request,7,'https://example.com/page'),/중지/);
   await w.context.setReader(7,'https://example.com/page','running');
   const next=await w.context.translate(request,7,'https://example.com/page');
@@ -108,7 +108,7 @@ test('provider switch cancels both active and queued jobs before changing settin
   const w=worker();await w.context.setReader(1,'https://example.com/page','running');
   const jobs=Array.from({length:3},()=>w.context.translate({...request,hold:true},1,'https://example.com/page').catch(e=>e));
   await until(()=>w.held.size===2);
-  await w.context.saveProvider({provider:'openai'});
+  await w.context.saveProvider({provider:'codex'});
   for(const result of await Promise.all(jobs))assert.match(result.message,/중지/);
   assert.equal(w.held.size,0);assert.equal(w.calls.filter(c=>c.type==='translate').length,2);
   assert.equal(w.sessions['reader:1'].mode,'paused');
@@ -173,7 +173,7 @@ test('provider change drains four active jobs and rejects queued jobs',async()=>
   const w=worker(4);await w.context.setReader(1,'https://example.com/page','running');
   const jobs=Array.from({length:6},(_,index)=>w.context.translate({...request,hold:true,before:String(index)},1,'https://example.com/page').catch(e=>e));
   await until(()=>w.held.size===4);
-  await w.context.saveProvider({provider:'openai'});
+  await w.context.saveProvider({provider:'codex'});
   for(const result of await Promise.all(jobs))assert.match(result.message,/중지/);
   assert.equal(w.calls.filter(c=>c.type==='translate').length,4);assert.equal(w.held.size,0);
   assert(w.events.lastIndexOf('canceled-translation-finished')<w.events.indexOf('settings-save'));
@@ -185,15 +185,9 @@ test('clearing translation cache preserves the saved toolbar corner',async()=>{
   assert.equal(reply.ok,true);assert.equal(w.local['toolbar-corner'],'top-left');assert.equal(w.local['page:test'],undefined);
 });
 
-test('switching from four slots to Google queues all tabs and probes one at a time',async()=>{
-  const w=worker(4);await w.context.setReader(1,'https://example.com/page','running');
-  await w.context.translate(request,1,'https://example.com/page');
-  await w.context.saveProvider({provider:'antigravity'});
-  await w.context.setReader(1,'https://example.com/page','running');await w.context.setReader(2,'https://example.com/page','running');
-  const jobs=[w.context.translate({...request,hold:true,before:'one'},1,'https://example.com/page'),w.context.translate({...request,hold:true,before:'two'},2,'https://example.com/page'),w.context.testProvider()];
-  for(let i=0;i<3;i++){
-    await until(()=>w.held.size===1);await new Promise(r=>setTimeout(r,20));
-    assert.equal(w.held.size,1);w.held.values().next().value();await jobs[i];
-  }
-  assert.equal(w.calls.filter(c=>c.type==='translate').length,3);await Promise.all(jobs);
+test('an old host cannot send translations to a removed provider',async()=>{
+  const w=worker();await w.context.setReader(1,'https://example.com/page','running');
+  w.context.native=async type=>{assert.equal(type,'settings-get');return {selected:'antigravity',scope:'old'};};
+  await assert.rejects(w.context.translate(request,1,'https://example.com/page'),/업데이트/);
+  assert.equal(w.calls.filter(call=>call.type==='translate').length,0);
 });
