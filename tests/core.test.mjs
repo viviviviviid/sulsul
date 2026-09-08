@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPrompt, parseTranslation, encodeMessage, createDecoder } from '../host/core.mjs';
+import { buildPrompt, translationSchema, parseTranslation, encodeMessage, createDecoder } from '../host/core.mjs';
 import { makeEnvironment } from '../host/runner.mjs';
 const request = {blocks:[{id:'b0',parts:[{id:'t0',text:'Call ',locked:false},{id:'t1',text:'lzReceive()',locked:true},{id:'t2',text:' after verification.',locked:false}]}]};
 test('full sentence can be distributed around a locked code node',()=>{
@@ -38,4 +38,16 @@ test('API credentials and arbitrary Node startup options do not enter CLI enviro
     assert.equal(env.HOME,'P');assert.equal(env.XDG_CONFIG_HOME,'P/.config');
     assert.notEqual(process.env.HOME,'P');
   }
+});
+
+test('request-specific schema requires every editable fragment including whitespace and excludes locked code',()=>{
+ const input={blocks:[{id:'b23',parts:[{id:'t0',text:'Read ',locked:false},{id:'t1',text:'code',locked:true},{id:'t2',text:' ',locked:false},{id:'t3',text:'carefully',locked:false}]}]};
+ const schema=translationSchema(input);
+ assert.deepEqual(schema.properties.blocks.required,['b23']);
+ assert.deepEqual(schema.properties.blocks.properties.b23.required,['t0','t2','t3']);
+ assert.equal(schema.properties.blocks.properties.b23.additionalProperties,false);
+ const output=parseTranslation(JSON.stringify({blocks:{b23:{t0:'자세히 읽으세요',t2:'',t3:''}}}),input);
+ assert.equal(output.blocks[0].parts.length,3);
+ assert.throws(()=>parseTranslation(JSON.stringify({blocks:{b23:{t0:'자세히 읽으세요',t3:''}}}),input),/일부 문장/);
+ assert.match(buildPrompt(input,{keyed:true}),/"blocks":{"b0"/);
 });

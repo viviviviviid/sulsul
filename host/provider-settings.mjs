@@ -26,7 +26,8 @@ export class ProviderSettings{
   public(state=this.read()){
     const option={...PROVIDERS.codex,...this.options(state)};
     const scope=createHash('sha256').update(JSON.stringify([PROMPT_VERSION,'chatgpt-only',state.revision,option])).digest('hex');
-    return {selected:'codex',providers:{codex:option},scope};
+    const cacheScope=createHash('sha256').update(JSON.stringify([PROMPT_VERSION,'chatgpt-block-cache',option.model,option.fast])).digest('hex');
+    return {selected:'codex',providers:{codex:option},scope,cacheScope};
   }
   async credentials(state=this.read()){return {id:'codex',...this.options(state)};}
   save(data){

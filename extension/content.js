@@ -136,7 +136,8 @@
   }
 
   function serialize(record) {
-    return { id: record.id, heading: record.heading.slice(0,240), parts: record.parts.map(p => ({ id: p.id, text: p.original, locked: p.locked })) };
+    const navigation=!!record.element.closest('nav,aside,header,footer,[role="navigation"],[role="complementary"],[role="banner"],[role="contentinfo"]');
+    return { id: record.id, cacheKind:navigation?'navigation':'content', heading: record.heading.slice(0,240), parts: record.parts.map(p => ({ id: p.id, text: p.original, locked: p.locked })) };
   }
 
   function unchanged(record, mode) {

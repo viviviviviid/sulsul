@@ -2,10 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {EventEmitter} from 'node:events';
-import {buildPrompt,parseTranslation} from './core.mjs';
+import {buildPrompt,parseTranslation,translationSchema} from './core.mjs';
 import {accountPaths,accountEnvironment} from './account-runtime.mjs';
 
-const schema=JSON.parse(fs.readFileSync(new URL('./translation.schema.json',import.meta.url),'utf8'));
 export function accountError(id,text='') {
   const label='ChatGPT';
   if(/quota|rate.?limit|usage.?limit|429|exhaust/i.test(text))return new Error(`${label} 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.`);
@@ -52,7 +51,7 @@ export class CodexConnection extends EventEmitter {
       this.child.stdin.write(JSON.stringify({id,method,params})+'\n');
     });
   }
-  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.9.0'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
+  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.9.2'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
   close(error=accountError('codex')) {
     if(this.closed)return;this.closed=true;
     for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(error);}this.pending.clear();
@@ -63,7 +62,7 @@ export async function translateAccount(config,provider,data,signal,{Connection=C
   const runtime=accountPaths(config,provider.id);
   if(!fs.existsSync(runtime.cli))throw new Error('ChatGPT 설정에서 계정 연결을 먼저 눌러 주세요.');
   const deadline=AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(240_000)]);
-  const prompt=buildPrompt(data,{cli:false});let result;
+  const prompt=buildPrompt(data,{cli:false,keyed:true}),schema=translationSchema(data);let result;
   {
     const client=new Connection(runtime,{args:codexArguments(provider.fast===true)}),abort=()=>client.close(new Error('번역을 중지했습니다.'));
     deadline.addEventListener('abort',abort,{once:true});

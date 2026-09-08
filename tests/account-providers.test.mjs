@@ -41,7 +41,7 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
       if(method==='thread/start')return {thread:{id:'test'}};
       if(method==='turn/start')setTimeout(()=>{
         this.emit('notification','item/completed',{threadId:'other',item:{type:'agentMessage',text:'wrong'}});
-        this.emit('notification','item/completed',{threadId:'test',item:{type:'agentMessage',text:JSON.stringify(output)}});
+        this.emit('notification','item/completed',{threadId:'test',item:{type:'agentMessage',text:JSON.stringify({blocks:{b0:{t0:output.blocks[0].parts[0].text}}})}});
         this.emit('notification','turn/completed',{threadId:'test',turn:{status:'completed'}});
       },1);
       return {};
@@ -57,7 +57,7 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
     const thread=requests.find(r=>r.method==='thread/start').params;
     assert.equal(thread.ephemeral,true);assert.equal(thread.sandbox,'read-only');assert.equal(thread.approvalPolicy,'never');assert.equal(thread.model,null);
     const turn=requests.find(r=>r.method==='turn/start').params;
-    assert.ok(turn.outputSchema);assert.ok(codexArguments().includes('project_doc_max_bytes=0'));
+    assert.deepEqual(turn.outputSchema.properties.blocks.properties.b0.required,['t0']);assert.ok(codexArguments().includes('project_doc_max_bytes=0'));
     class APIConnection extends Connection{async request(method,params){if(method==='account/read')return {account:{type:'apiKey'}};return super.request(method,params);}}
     const before=requests.length;await assert.rejects(translateAccount(f.config,{id:'codex',model:'default'},data,null,{Connection:APIConnection}),/계정 연결/);assert.equal(requests.length,before);
     const controller=new AbortController();

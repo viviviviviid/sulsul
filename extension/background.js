@@ -111,6 +111,20 @@ async function hash(value) {
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 
+async function blockCacheKey(block,data,sourceUrl,scope) {
+  const url=new URL(sourceUrl),navigation=block.cacheKind==='navigation';
+  // IDs and batch neighbors change with collection order; they aren't content identity.
+  return 'page:block:' + await hash(JSON.stringify(['1',CACHE_VERSION,scope,url.origin,
+    navigation?'navigation':[url.pathname+url.search,data.page?.title||'',block.heading||''],
+    block.parts.map(p=>[p.text,!!p.locked])]));
+}
+
+function cachedBlock(entry,block) {
+  const parts=block.parts.filter(p=>!p.locked),texts=entry?.texts;
+  if(!Array.isArray(texts)||texts.length!==parts.length||!texts.every(t=>typeof t==='string')||!texts.some(t=>t.trim()))return null;
+  return {id:block.id,parts:parts.map((p,i)=>({id:p.id,text:texts[i]}))};
+}
+
 function drainTranslations() {
   while (runningTranslations < translationLimit && translationQueue.length) {
     const job = translationQueue.shift();
@@ -155,8 +169,8 @@ async function translate(data, tabId, sourceUrl) {
     const admitted = Date.now();
     const check = () => { if (job.canceled || changingProvider) throw new Error('번역이 중지되었거나 AI 설정이 바뀌었습니다.'); };
     check();
-    const { scope } = await translationSettings();
-    const key = 'page:' + await hash(JSON.stringify([CACHE_VERSION, scope, data]));
+    const { scope,cacheScope=scope } = await translationSettings();
+    const key = 'page:' + await hash(JSON.stringify([CACHE_VERSION, cacheScope, data]));
     const cached = recentResults.get(key) || (await chrome.storage.local.get(key))[key];
     const session = await readReader(tabId, sourceUrl);
     const tab = await chrome.tabs.get(tabId);
@@ -164,20 +178,38 @@ async function translate(data, tabId, sourceUrl) {
     if (session?.mode !== 'running' || tab.url?.split('#')[0] !== sourceUrl.split('#')[0]) throw new Error('번역이 중지되었거나 페이지가 바뀌었습니다.');
     const timings = {queueMs:admitted-arrived,prepareMs:Date.now()-admitted};
     if (cached) return { ...cached.result, cached:true, timings:{...timings,totalRequestMs:Date.now()-arrived} };
+    const blockKeys=await Promise.all(data.blocks.map(b=>blockCacheKey(b,data,sourceUrl,cacheScope)));
+    const savedBlocks=await Promise.all(blockKeys.map(async key=>recentResults.get(key)||(await chrome.storage.local.get(key))[key]));
+    const restored=data.blocks.map((b,i)=>cachedBlock(savedBlocks[i],b));
+    const missing=data.blocks.filter((b,i)=>!restored[i]);
+    check();
+    if(!missing.length)return {blocks:restored,cached:true,timings:{...timings,totalRequestMs:Date.now()-arrived}};
     const sent = Date.now();
     job.nativeSent = true;
-    const result = await native('translate', data, tabId, sourceUrl, scope, job.id);
+    const fresh = await native('translate', {...data,blocks:missing}, tabId, sourceUrl, scope, job.id);
     check();
+    const result={...fresh,blocks:data.blocks.map((b,i)=>restored[i]||fresh.blocks?.find(v=>v.id===b.id)).filter(Boolean)};
     const entry = {time:Date.now(),result:{blocks:result.blocks}};
-    recentResults.set(key,entry);
-    if (recentResults.size > 8) recentResults.delete(recentResults.keys().next().value);
+    const writes={};let validBlocks=0;
+    // Only complete, valid blocks enter the reusable cache. Never cache partial errors.
+    for(let i=0;i<data.blocks.length;i++) {
+      const block=data.blocks[i],out=result.blocks.find(b=>b.id===block.id),parts=block.parts.filter(p=>!p.locked);
+      if(!out||out.parts?.length!==parts.length)continue;
+      const texts=parts.map(p=>out.parts.find(t=>t.id===p.id)?.text);
+      if(!cachedBlock({texts},block))continue;
+      validBlocks++;
+      writes[blockKeys[i]]={time:Date.now(),texts};
+      recentResults.set(blockKeys[i],writes[blockKeys[i]]);
+    }
+    if(validBlocks===data.blocks.length){writes[key]=entry;recentResults.set(key,entry);}
+    while (recentResults.size > 500) recentResults.delete(recentResults.keys().next().value);
     cacheWrites.promise = cacheWrites.promise.catch(() => {}).then(async () => {
-      await chrome.storage.local.set({ [key]: entry });
+      await chrome.storage.local.set(writes);
       const all = await chrome.storage.local.get(null);
       const entries = Object.entries(all).filter(([k]) => k.startsWith('page:')).sort((a,b) => a[1].time - b[1].time);
       let bytes = entries.reduce((n, [k,v]) => n + k.length + JSON.stringify(v).length * 2, 0);
       const remove = [];
-      while (bytes > 3_000_000 || entries.length > 150) {
+      while (bytes > 3_000_000 || entries.length > 1500) {
         const [k,v] = entries.shift(); remove.push(k); bytes -= k.length + JSON.stringify(v).length * 2;
       }
       if (remove.length) await chrome.storage.local.remove(remove);

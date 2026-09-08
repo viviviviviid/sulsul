@@ -18,7 +18,7 @@ test('section links keep an active translation, but a different document cancels
     tabs:{async get(){return {url:'https://docs.example.com/guide?version=2#start'};},onRemoved:event('removed'),onUpdated:event('updated')},commands:{onCommand:event('command')}
   }});
   vm.runInContext(readFileSync(new URL('../extension/background.js',import.meta.url),'utf8'),context);
-  const task=context.translate({},7,'https://docs.example.com/guide?version=2#start').catch(e=>e);
+  const task=context.translate({blocks:[{id:'b',parts:[{id:'t',text:'Read this guide.',locked:false}]}]},7,'https://docs.example.com/guide?version=2#start').catch(e=>e);
   await Promise.resolve();
   callbacks.nativeMessage({id:sent[0].id,ok:true,result:{selected:'codex',scope:'test'}});
   const end=Date.now()+2000;

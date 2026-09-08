@@ -5,10 +5,11 @@ import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 const source=readFileSync(new URL('../extension/background.js',import.meta.url),'utf8');
 const request={blocks:[{id:'b0',parts:[{id:'t0',text:'Read easily.',locked:false}]}]};
-function worker(maxConcurrentTranslations=2){
-  const callbacks={},events=[],sessions={},local={},calls=[];
+function worker(maxConcurrentTranslations=2,local={}){
+  const callbacks={},events=[],sessions={},calls=[];
   const event=name=>({addListener(fn){callbacks[name]=fn;}});
   const storage=data=>({async get(key){return key===null?{...data}:{[key]:data[key]};},async set(value){Object.assign(data,value);},async remove(key){for(const k of [].concat(key))delete data[k];},async clear(){for(const k of Object.keys(data))delete data[k];}});
+  let tabUrl='https://example.com/page';
   let scope='first',sequence=0; const held=new Map();
   const port={onMessage:event('nativeMessage'),onDisconnect:event('disconnect'),postMessage(message){
     calls.push(message);events.push(message.type);
@@ -17,7 +18,7 @@ function worker(maxConcurrentTranslations=2){
     else if(message.type==='translate'||message.type==='provider-test'){
       sequence++;
       if(message.data?.hold||message.type==='provider-test')held.set(message.id,()=>{held.delete(message.id);events.push('canceled-translation-finished');answer({blocks:[]});});
-      else answer({blocks:[],sequence});
+      else answer({blocks:message.data.blocks.map(b=>({id:b.id,parts:b.parts.filter(p=>!p.locked).map(p=>({id:p.id,text:'번역 '+p.text}))})),sequence});
     }else if(message.type==='cancel'){answer({});setTimeout(()=>{for(const id of message.data?.ids || held.keys())held.get(id)?.();},20);}
     else if(message.type==='settings-save'){scope='second';answer({scope});}
   }};
@@ -25,11 +26,11 @@ function worker(maxConcurrentTranslations=2){
     runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
     contextMenus:{onClicked:event('menu')},
     storage:{local:storage(local),session:storage(sessions)},
-    tabs:{async get(){return {url:'https://example.com/page'};},async sendMessage(id,msg){events.push(msg.type);},onUpdated:event('updated'),onRemoved:event('removed')},
+    tabs:{async get(){return {url:tabUrl};},async sendMessage(id,msg){events.push(msg.type);},onUpdated:event('updated'),onRemoved:event('removed')},
     commands:{onCommand:event('command')}
   }});
   vm.runInContext(source,context);
-  return {context,sessions,local,calls,events,callbacks,held};
+  return {context,sessions,local,calls,events,callbacks,held,setURL(url){tabUrl=url;}};
 }
 test('provider switch cancels and drains translation before saving, and pauses the reader',async()=>{
   const w=worker();await w.context.setReader(7,'https://example.com/page','running');
@@ -119,7 +120,7 @@ test('cache storage errors preserve successful translation and release the queue
   w.context.chrome.storage.local.set=async()=>{throw new Error('disk full');};
   const first=await w.context.translate(request,1,'https://example.com/page');
   assert.equal(first.sequence,1);
-  const second=await w.context.translate({...request,before:'different context'},1,'https://example.com/page');
+  const second=await w.context.translate({blocks:[{id:'other',parts:[{id:'t',text:'A different paragraph.',locked:false}]}]},1,'https://example.com/page');
   assert.equal(second.sequence,2);
   assert.equal((await w.context.translate(request,1,'https://example.com/page')).cached,true);
 });
@@ -190,4 +191,33 @@ test('an old host cannot send translations to a removed provider',async()=>{
   w.context.native=async type=>{assert.equal(type,'settings-get');return {selected:'antigravity',scope:'old'};};
   await assert.rejects(w.context.translate(request,1,'https://example.com/page'),/업데이트/);
   assert.equal(w.calls.filter(call=>call.type==='translate').length,0);
+});
+
+test('block cache survives worker restart, reordered batches and new IDs; only changed text is sent',async()=>{
+ const w=worker();const url='https://example.com/page';await w.context.setReader(7,url,'running');
+ const block=(id,text,kind='content')=>({id,cacheKind:kind,heading:'Overview',parts:[{id:id+'-text',text,locked:false}]});
+ await w.context.translate({blocks:[block('a','First paragraph'),block('b','Second paragraph')]},7,url);
+ await vm.runInContext('cacheWrites.promise',w.context);
+ const next=worker(2,w.local);await next.context.setReader(7,url,'running');
+ const cached=await next.context.translate({blocks:[block('new-b','Second paragraph'),block('new-a','First paragraph')]},7,url);
+ assert.equal(cached.cached,true);assert.equal(next.calls.filter(c=>c.type==='translate').length,0);
+ assert.equal(cached.blocks[0].id,'new-b');assert.equal(cached.blocks[0].parts[0].id,'new-b-text');
+ const mixed=await next.context.translate({blocks:[block('x','First paragraph'),block('y','Updated paragraph')]},7,url);
+ assert.equal(mixed.blocks.length,2);
+ assert.equal(next.calls.find(c=>c.type==='translate').data.blocks.length,1);
+ assert.equal(next.calls.find(c=>c.type==='translate').data.blocks[0].parts[0].text,'Updated paragraph');
+});
+
+test('navigation is shared across documents of one origin, while prose and other origins remain separate',async()=>{
+ const w=worker();const first='https://example.com/page';await w.context.setReader(7,first,'running');
+ const block=(kind)=>({id:'b',cacheKind:kind,parts:[{id:'t',text:'Getting started',locked:false}]});
+ await w.context.translate({page:{title:'One'},blocks:[block('navigation')]},7,first);
+ await vm.runInContext('cacheWrites.promise',w.context);
+ const second='https://example.com/other';w.setURL(second);await w.context.setReader(7,second,'running');
+ const hit=await w.context.translate({page:{title:'Two'},blocks:[block('navigation')]},7,second);assert.equal(hit.cached,true);
+ await w.context.translate({page:{title:'Two'},blocks:[block('content')]},7,second);
+ assert.equal(w.calls.filter(c=>c.type==='translate').length,2);
+ const third='https://other.example/page';w.setURL(third);await w.context.setReader(7,third,'running');
+ await w.context.translate({blocks:[block('navigation')]},7,third);
+ assert.equal(w.calls.filter(c=>c.type==='translate').length,3);
 });

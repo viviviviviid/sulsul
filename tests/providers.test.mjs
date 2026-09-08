@@ -18,6 +18,18 @@ test('Fast persists, changes cache scope and can be disabled',async()=>{
     await assert.rejects(reopened.save({provider:'codex',model:'default',fast:'true'}),/Fast/);
   }finally{f.dispose();}
 });
+test('cache identity survives saving unchanged settings and returning to a model',async()=>{
+  const f=fixture();try{
+    const initial=f.settings.public();
+    await f.settings.save({provider:'codex',model:'default'});
+    assert.notEqual(f.settings.public().scope,initial.scope);
+    assert.equal(f.settings.public().cacheScope,initial.cacheScope);
+    await f.settings.save({provider:'codex',model:'gpt-5.6-luna'});
+    assert.notEqual(f.settings.public().cacheScope,initial.cacheScope);
+    await f.settings.save({provider:'codex',model:'default'});
+    assert.equal(f.settings.public().cacheScope,initial.cacheScope);
+  }finally{f.dispose();}
+});
 test('new installations support only ChatGPT and need no API key',async()=>{
   const f=fixture();try{assert.deepEqual(Object.keys(PROVIDERS),['codex']);assert.equal(f.settings.public().selected,'codex');assert.deepEqual(await f.settings.credentials(),{id:'codex',model:'default',fast:false,hasKey:false});assert.equal(new ProviderRouter(f.config,f.settings).health().provider,'codex');}finally{f.dispose();}
 });
