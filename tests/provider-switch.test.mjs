@@ -19,7 +19,7 @@ function worker(maxConcurrentTranslations=2){
       if(message.data?.hold||message.type==='provider-test')held.set(message.id,()=>{held.delete(message.id);events.push('canceled-translation-finished');answer({blocks:[]});});
       else answer({blocks:[],sequence});
     }else if(message.type==='cancel'){answer({});setTimeout(()=>{for(const id of message.data?.ids || held.keys())held.get(id)?.();},20);}
-    else if(message.type==='settings-save'){scope='second';answer({scope});}
+    else if(message.type==='settings-save'){scope='second';if(message.data.provider==='antigravity')maxConcurrentTranslations=1;answer({scope});}
   }};
   const context=vm.createContext({URL,crypto:webcrypto,setTimeout,clearTimeout,TextEncoder,chrome:{
     runtime:{id:'test',getURL:()=> 'chrome-extension://test/',connectNative:()=>port,onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup')},
@@ -183,4 +183,17 @@ test('clearing translation cache preserves the saved toolbar corner',async()=>{
   Object.assign(w.local,{'toolbar-corner':'top-left','page:test':{result:{blocks:[]}}});
   const reply=await new Promise(resolve=>w.callbacks.message({type:'clear-cache'},{id:'test',url:'chrome-extension://test/options.html'},resolve));
   assert.equal(reply.ok,true);assert.equal(w.local['toolbar-corner'],'top-left');assert.equal(w.local['page:test'],undefined);
+});
+
+test('switching from four slots to Google queues all tabs and probes one at a time',async()=>{
+  const w=worker(4);await w.context.setReader(1,'https://example.com/page','running');
+  await w.context.translate(request,1,'https://example.com/page');
+  await w.context.saveProvider({provider:'antigravity'});
+  await w.context.setReader(1,'https://example.com/page','running');await w.context.setReader(2,'https://example.com/page','running');
+  const jobs=[w.context.translate({...request,hold:true,before:'one'},1,'https://example.com/page'),w.context.translate({...request,hold:true,before:'two'},2,'https://example.com/page'),w.context.testProvider()];
+  for(let i=0;i<3;i++){
+    await until(()=>w.held.size===1);await new Promise(r=>setTimeout(r,20));
+    assert.equal(w.held.size,1);w.held.values().next().value();await jobs[i];
+  }
+  assert.equal(w.calls.filter(c=>c.type==='translate').length,3);await Promise.all(jobs);
 });

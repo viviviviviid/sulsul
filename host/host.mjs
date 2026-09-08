@@ -14,6 +14,7 @@ if (origin !== `chrome-extension://${config.extensionId}/`) process.exit(1);
 const active = new Map();
 let loginSession;
 const MAX_CONCURRENT_TRANSLATIONS = 4;
+const translationCapacity = () => settings.read().selected === 'antigravity' ? 1 : MAX_CONCURRENT_TRANSLATIONS;
 let saving = false;
 const abortAll = () => { for (const task of active.values()) task.controller.abort(); };
 function send(value) { try { process.stdout.write(encodeMessage(value)); } catch { process.exit(1); } }
@@ -23,7 +24,7 @@ async function handle(message) {
   if (typeof id !== 'string' || id.length > 100) return;
   try {
     if (message.type === 'health') return send({ id, ok: true, result: router.health() });
-    if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:MAX_CONCURRENT_TRANSLATIONS} });
+    if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:translationCapacity()} });
     if (message.type === 'settings-save') {
       if (loginSession?.active) throw new Error('계정 연결을 완료하거나 취소한 뒤 설정을 저장해 주세요.');
       if (active.size || saving) throw new Error('번역을 중지한 뒤 설정을 저장해 주세요.');
@@ -69,7 +70,7 @@ async function handle(message) {
     }
     if (!['translate','provider-test'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');
     if (loginSession?.active) throw new Error('계정 연결을 완료한 뒤 번역을 시작해 주세요.');
-    if (saving || active.size >= MAX_CONCURRENT_TRANSLATIONS || active.has(id)) throw new Error('다른 번역이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
+    if (saving || active.size >= translationCapacity() || active.has(id)) throw new Error('다른 번역이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
     const task = { id, controller: new AbortController() };
     active.set(id,task);
     const started = performance.now();

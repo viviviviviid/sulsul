@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import { buildPrompt, parseTranslation } from './core.mjs';
 
 export const DEFAULT_MODEL = 'gemini-3.8-flash-low';
@@ -37,22 +38,41 @@ export function health(config) {
     message:!ready ? '연결 프로그램 설치가 필요합니다.' : verified ? '최근 번역에서 Google 연결을 확인했어요.' : '연결 프로그램 준비됨 · 첫 번역에서 계정을 확인해요.' };
 }
 
+const INTERRUPTED_MESSAGE = 'Gemini 응답 연결이 중간에 끊겼습니다. 잠시 후 다시 시도해 주세요.';
 export function readableError(text) {
+  text = typeof text === 'string' ? text : JSON.stringify(text || '');
   if (/no longer supported|migrate to.*Antigravity/i.test(text)) return '기존 Gemini CLI 지원이 종료되었습니다. 술술 설치 프로그램을 다시 실행해 주세요.';
   if (/quota|resource_exhausted|429|rate.?limit|exhaust/i.test(text)) return 'Gemini 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요. 유료 API로 전환하지 않습니다.';
   if (/auth|credential|login|log in|sign.in|401|invalid_grant|token.*expir/i.test(text)) return 'Google 로그인이 필요하거나 만료되었습니다. 확장의 계정 연결을 눌러 주세요.';
   if (/403|permission_denied|access.denied/i.test(text)) return '이 Google 계정에서 Antigravity를 사용할 수 없습니다. 계정 또는 구독 상태를 확인해 주세요.';
+  if (/stream (?:was |has been )?interrupted/i.test(text)) return INTERRUPTED_MESSAGE;
   if (/ENOTFOUND|ECONN|fetch failed|network|ETIMEDOUT|dial tcp|unavailable/i.test(text)) return 'Gemini에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.';
   return 'Gemini가 번역을 완료하지 못했습니다. 다시 시도해 주세요.';
 }
 
-export async function withFormatRetry(config, data, signal, run) {
-  try { return await run(config, data, signal); }
-  catch(error) {
-    if (signal?.aborted || error.code !== 'INVALID_TRANSLATION' || (config.model || DEFAULT_MODEL) !== DEFAULT_MODEL) throw error;
-    // Only malformed model output is retried. Authentication, quota, cancellation,
-    // and network failures never trigger another request or a different provider.
-    return run({...config,model:'gemini-3.8-flash-medium'},data,signal);
+export function cliError(text) {
+  const error = new Error(readableError(text));
+  if (error.message === INTERRUPTED_MESSAGE) error.code = 'STREAM_INTERRUPTED';
+  return error;
+}
+
+export async function withFormatRetry(config, data, signal, run, {wait=signal=>delay(800,undefined,{signal})}={}) {
+  let current=config, streamRetried=false, formatRetried=false;
+  for (;;) {
+    if (signal?.aborted) throw new Error('번역을 중지했습니다.');
+    try { return await run(current, data, signal); }
+    catch(error) {
+      if (signal?.aborted) throw error;
+      if (error.code === 'STREAM_INTERRUPTED' && !streamRetried) {
+        streamRetried=true;
+        try { await wait(signal); } catch { throw new Error('번역을 중지했습니다.'); }
+        continue; // Same model, once per request, after the previous child exits.
+      }
+      if (error.code === 'INVALID_TRANSLATION' && !formatRetried && (current.model || DEFAULT_MODEL) === DEFAULT_MODEL) {
+        formatRetried=true; current={...current,model:'gemini-3.8-flash-medium'}; continue;
+      }
+      throw error; // Authentication, quota and other failures are never retried.
+    }
   }
 }
 
@@ -65,7 +85,7 @@ export function translate(config, data, signal) {
     .then(result => ({...result,timings:{...result.timings,attempts,providerTotalMs:Math.round(performance.now()-started)}}));
 }
 
-function runTranslation(config, data, signal) {
+export function runTranslation(config, data, signal, {spawnProcess=spawn}={}) {
   const started = performance.now();
   const timings = {};
   return new Promise((resolve, reject) => {
@@ -80,16 +100,21 @@ function runTranslation(config, data, signal) {
       if (settings.modelProvider || settings.useG1Credits === true || !required.every(rule => settings.permissions?.deny?.includes(rule))) throw new Error('연결 설정이 바뀌었습니다. 설치 프로그램을 다시 실행해 주세요.');
     } catch(e) { reject(e); return; }
     const args = cliArguments(config);
-    const child = spawn(config.cli, args, { cwd:config.workspace, env:makeEnvironment(config), shell:false, windowsHide:true, stdio:['pipe','pipe','pipe'] });
+    const child = spawnProcess(config.cli, args, { cwd:config.workspace, env:makeEnvironment(config), shell:false, windowsHide:true, stdio:['pipe','pipe','pipe'] });
     timings.promptChars = prompt.length;
     child.once('spawn',() => { timings.spawnMs=Math.round(performance.now()-started); });
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
-    let buffer='', stderr='', settled=false, bytes=0;
+    let buffer='', stderr='', settled=false, bytes=0, closed=false;
     const finish = (error, value) => {
       if (settled) return;
       settled=true; clearTimeout(timeout); signal?.removeEventListener('abort',abort);
-      child.kill();
-      if (error) reject(error); else resolve(value);
+      // Keep the host slot until the process and its streams are fully closed.
+      let delivered=false, forceKill;
+      const deliver=()=>{if(delivered)return;delivered=true;clearTimeout(forceKill);error?reject(error):resolve(value);};
+      child.once('close',deliver);
+      try { child.kill(); } catch {}
+      if (closed) deliver();
+      if (!delivered) forceKill=setTimeout(()=>{try{child.kill('SIGKILL');}catch{}},1000).unref();
     };
     const abort = () => finish(new Error('번역을 중지했습니다.'));
     const timeout = setTimeout(() => finish(new Error('번역 응답이 늦어 중지했습니다. 잠시 후 다시 시도해 주세요.')),240_000);
@@ -110,7 +135,7 @@ function runTranslation(config, data, signal) {
         if (/auth|credential|login|401|token/i.test(result?.error || '')) {
           try { rmSync(path.join(config.profile,'verified.json'),{force:true}); } catch {}
         }
-        return finish(new Error(readableError(result?.error || stderr)));
+        return finish(cliError(result?.error || stderr));
       }
       try {
         const parsing = performance.now();
@@ -130,9 +155,10 @@ function runTranslation(config, data, signal) {
       while((index=buffer.indexOf('\n'))>=0) { const line=buffer.slice(0,index);buffer=buffer.slice(index+1);consume(line); }
     });
     child.on('close',()=>{
+      closed=true;
       if (settled) return;
       consume(buffer);
-      if (!settled) finish(new Error(readableError(stderr)));
+      if (!settled) finish(cliError(stderr));
     });
     child.stdin.end(JSON.stringify({event:'user',message:{content:prompt}})+'\n','utf8');
   });

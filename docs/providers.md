@@ -8,6 +8,8 @@
 
 추가 크레딧·API 키 방식으로 전환하지 않습니다. 계정의 이용 자격과 한도는 Google이 결정합니다. [공식 설치](https://antigravity.google/docs/cli/install), [요금제](https://antigravity.google/docs/plans/), [크레딧 설정](https://antigravity.google/docs/cli/credits/).
 
+Antigravity 요청은 모든 탭과 연결 테스트를 합쳐 한 번에 하나씩 처리합니다. 4개 동시 요청에서 응답 스트림 중단을 재현하여 0.8.1부터 제한했습니다. 스트림이 중단된 경우에만 0.8초 뒤 같은 모델로 한 번 재시도하며, 이 재시도도 서비스 사용량에 포함될 수 있습니다. 한도·인증 오류는 자동 재시도하지 않습니다.
+
 ## ChatGPT 계정
 
 AI 설정에서 **ChatGPT 계정 · Codex**를 고르고 저장한 뒤 **ChatGPT 계정 연결**을 누릅니다. 공식 Codex 0.153.4를 npm 공식 배포에서 내려받아 SHA-512를 확인합니다. 로그인 페이지를 열어 ChatGPT에서 인증하면 연결 상태가 자동으로 반영됩니다. 모델 입력란의 default는 Codex 기본 모델을 사용하며 모델 ID를 직접 지정할 수도 있습니다.

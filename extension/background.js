@@ -78,7 +78,7 @@ function connect() {
   });
   port.onDisconnect.addListener(() => {
     const detail = chrome.runtime.lastError?.message || '';
-    if (nativePort === port) nativePort = null;
+    if (nativePort === port) { nativePort = null; translationLimit = 1; }
     const error = /not found|forbidden|not registered/i.test(detail)
       ? '연결 프로그램 설치가 필요합니다. 설치 안내를 확인해 주세요.'
       : 'AI 연결이 끊겼습니다. 다시 시도해 주세요.';
@@ -233,6 +233,8 @@ async function saveProvider(data) {
     await cancelTranslations(jobs);
     await Promise.all(tasks.map(p => p.done));
     await Promise.all(tabIds.map(id => chrome.tabs.sendMessage(id,{type:'sulsul-provider-changed',providerRevision}).catch(() => {})));
+    // The next provider may have a lower limit. Negotiate before widening again.
+    translationLimit = 1;
     return await native('settings-save',data);
   } finally { changingProvider = false; }
 }

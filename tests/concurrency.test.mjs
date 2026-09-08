@@ -65,7 +65,10 @@ test('native host runs four requests, cancels only the requested job, and guards
     const completed=await second;assert.equal(completed.ok,true);
     assert.equal(completed.result.blocks[0].id,'b2');
     assert.ok(completed.result.timings.hostTotalMs>=0);assert.equal(completed.result.timings.attempts,1);
+    assert.equal((await rpc('google','settings-save',{provider:'antigravity',model:'gemini-3.8-flash-low'})).ok,true);
+    assert.equal((await rpc('google-capacity','settings-get')).result.maxConcurrentTranslations,1);
     assert.equal((await rpc('saved','settings-save',{provider:'ollama',model:'next',endpoint})).ok,true);
+    assert.equal((await rpc('other-capacity','settings-get')).result.maxConcurrentTranslations,4);
     assert.equal((await rpc('settings','settings-get')).result.providers.ollama.model,'next');
   }finally{
     child.stdin.end();child.kill();rejectAll(new Error('test ended'));

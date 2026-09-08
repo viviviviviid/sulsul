@@ -279,7 +279,7 @@
     }
     toolbar._label.textContent = failed ? '' : message;
     toolbar._alert.hidden = !failed;
-    toolbar._alert.textContent = failed ? message+'\n아래 버튼을 눌러 다시 시도해 주세요.' : '';
+    toolbar._alert.textContent = failed ? message : '';
     toolbar._section.toggleAttribute('data-error',failed);
     const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
     toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
