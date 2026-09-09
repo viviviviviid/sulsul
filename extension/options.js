@@ -27,7 +27,7 @@ $('settings').addEventListener('submit',event=>{event.preventDefault();action(as
   status('번역을 일시중지하고 설정을 저장하고 있어요.');
   saved=await rpc('settings-save',{provider:'codex',model:$('model').value,fast:$('fast').checked,targetLanguage:$('target-language').value});dirty=false;render();status('저장했어요. 페이지에서 이어 읽기를 눌러 주세요.');
 });});
-$('test').addEventListener('click',()=>action(async()=>{status('짧은 예문으로 ChatGPT 연결을 확인하고 있어요.');status((await rpc('provider-test')).message);}));
+$('test').addEventListener('click',()=>action(async()=>{status('AI 호출 없이 ChatGPT 로그인 상태를 확인하고 있어요.');status((await rpc('provider-test')).message);}));
 $('login').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('login.html')}));
 action(async()=>{const result=await rpc('settings-get');if(result.selected!=='codex')throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');saved=result;render();status('ChatGPT 계정을 연결하면 준비가 끝나요.');});
 

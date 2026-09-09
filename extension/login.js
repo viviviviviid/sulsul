@@ -15,6 +15,6 @@ function render(result){
 }
 async function poll(){try{render(await rpc('login-status',{sessionId}));}catch(error){failure(error);}}
 async function start(){clearTimeout(timer);$('connection').hidden=false;$('signin').hidden=true;$('retry').hidden=true;$('done').hidden=true;
-  try{const settings=await rpc('settings-get');if(settings.selected!=='codex')throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');render(await rpc('login'));}catch(error){failure(error);}}
+  try{const settings=await rpc('settings-get');if(settings.selected!=='codex'||settings.connectionCheck!=='account-only')throw new Error('AI 호출 없는 로그인 확인을 위해 연결 프로그램을 최신 버전으로 업데이트해 주세요.');render(await rpc('login'));}catch(error){failure(error);}}
 $('cancel').addEventListener('click',async()=>{clearTimeout(timer);try{render(await rpc('login-cancel',{sessionId}));}catch(error){failure(error);}});
 $('retry').addEventListener('click',start);start();

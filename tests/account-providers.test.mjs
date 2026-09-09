@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {accountPaths,accountEnvironment,packageLocation} from '../host/account-runtime.mjs';
-import {translateAccount,codexArguments,accountError} from '../host/account-providers.mjs';
+import {translateAccount,checkAccountConnection,codexArguments,accountError} from '../host/account-providers.mjs';
 import {AccountLoginSession,accountLoginURL} from '../host/account-login.mjs';
 
 const data={blocks:[{id:'b0',parts:[{id:'t0',text:'Read this paragraph.',locked:false}]}]};
@@ -18,6 +18,26 @@ function fixture(){
   return {config,dispose(){fs.rmSync(root,{recursive:true,force:true});}};
 }
 const until=async fn=>{const deadline=Date.now()+3000;while(!fn()){if(Date.now()>deadline)throw new Error('state timeout');await new Promise(r=>setTimeout(r,5));}};
+
+test('connection checks refresh login only, never create a thread or generate tokens',async()=>{
+  const f=fixture(),requests=[];let closed=false;
+  class Connection extends EventEmitter{
+    async initialize(){requests.push('initialize');}
+    async request(method,params){requests.push(method);assert.equal(method,'account/read');assert.equal(params.refreshToken,true);return {account:{type:'chatgpt'}};}
+    close(){closed=true;}
+  }
+  try{
+    assert.match((await checkAccountConnection(f.config,null,{Connection})).message,/AI를 호출하지/);
+    assert.deepEqual(requests,['initialize','account/read']);assert.equal(closed,true);
+    assert.ok(fs.existsSync(path.join(accountPaths(f.config,'codex').profile,'verified.json')));
+    class NoLogin extends Connection{async request(){return {account:null};}}
+    await assert.rejects(checkAccountConnection(f.config,null,{Connection:NoLogin}),/계정 연결/);
+    const beforeCancel=requests.length;
+    const controller=new AbortController();controller.abort();
+    await assert.rejects(checkAccountConnection(f.config,controller.signal,{Connection}),/중지/);
+    assert.equal(requests.length,beforeCancel,'canceled verification cannot send requests');
+  }finally{f.dispose();}
+});
 
 test('account runtimes isolate credentials and never inherit API keys or user hooks',()=>{
   const f=fixture();
@@ -38,9 +58,12 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
     async initialize(){}
     async request(method,params){requests.push({method,params});
       if(method==='account/read')return {account:{type:'chatgpt'}};
-      if(method==='thread/start')return {thread:{id:'test'}};
+      if(method==='thread/start')return {thread:{id:'test'},model:'gpt-5.6-luna',serviceTier:'default'};
       if(method==='turn/start')setTimeout(()=>{
         this.emit('notification','item/completed',{threadId:'other',item:{type:'agentMessage',text:'wrong'}});
+        const total={inputTokens:1000,cachedInputTokens:200,cacheWriteInputTokens:300,outputTokens:100,reasoningOutputTokens:40,totalTokens:1100};
+        this.emit('notification','thread/tokenUsage/updated',{threadId:'other',tokenUsage:{total:{...total,inputTokens:999999}}});
+        for(let i=0;i<2;i++)this.emit('notification','thread/tokenUsage/updated',{threadId:'test',tokenUsage:{total,last:{...total,inputTokens:10}}});
         this.emit('notification','item/completed',{threadId:'test',item:{type:'agentMessage',text:JSON.stringify({blocks:{b0:{t0:output.blocks[0].parts[0].text}}})}});
         this.emit('notification','turn/completed',{threadId:'test',turn:{status:'completed'}});
       },1);
@@ -49,7 +72,10 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
     close(error){this.emit('closed',error);}
   }
   try{
-    assert.deepEqual((await translateAccount(f.config,{id:'codex',model:'default'},data,null,{Connection})).blocks,output.blocks);
+    const measured=await translateAccount(f.config,{id:'codex',model:'default'},data,null,{Connection});
+    assert.deepEqual(measured.blocks,output.blocks);
+    assert.equal(measured.telemetry.model,'gpt-5.6-luna');assert.equal(measured.telemetry.usage.inputTokens,1000,'thread snapshots must not be summed or replaced by the last-call count');
+    assert.ok(measured.telemetry.cost.usd>0);
     assert.ok(launches[0].includes('features.fast_mode=false'));
     await translateAccount(f.config,{id:'codex',model:'default',fast:true},data,null,{Connection});
     assert.ok(launches[1].includes('features.fast_mode=true'));
@@ -63,6 +89,8 @@ test('Codex translates a fresh ephemeral read-only thread and validates auth',as
     const controller=new AbortController();
     class Held extends Connection{async request(method,params){if(method==='turn/start'){setTimeout(()=>controller.abort(),1);return {};}return super.request(method,params);}}
     await assert.rejects(translateAccount(f.config,{id:'codex',model:'default'},data,controller.signal,{Connection:Held}),/중지/);
+    class Failed extends Connection{async request(method,params){if(method==='turn/start'){setTimeout(()=>{this.emit('notification','thread/tokenUsage/updated',{threadId:'test',tokenUsage:{total:{inputTokens:50,cachedInputTokens:0,cacheWriteInputTokens:0,outputTokens:10,reasoningOutputTokens:0,totalTokens:60}}});this.emit('notification','turn/completed',{threadId:'test',turn:{status:'failed',error:{message:'429'}}});},1);return {};}return super.request(method,params);}}
+    await assert.rejects(translateAccount(f.config,{id:'codex',model:'default'},data,null,{Connection:Failed}),error=>error.telemetry.usage.inputTokens===50);
   }finally{f.dispose();}
 });
 

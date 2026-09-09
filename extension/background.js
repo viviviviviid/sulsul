@@ -98,8 +98,8 @@ function native(type, data, tabId, sourceUrl, scope, requestId) {
     const timer = setTimeout(() => {
       pending.delete(id);
       fail(new Error('연결 시간이 초과되었습니다. 다시 시도해 주세요.'));
-      if (type === 'translate' || type === 'provider-test') native('cancel',{ids:[id]}).catch(() => {});
-    }, type === 'translate' ? 250000 : type === 'provider-test' ? 70000 : type === 'settings-save' ? 25000 : 12000);
+      if (type === 'translate' || type === 'account-check') native('cancel',{ids:[id]}).catch(() => {});
+    }, type === 'translate' ? 250000 : type === 'account-check' ? 70000 : type === 'settings-save' ? 25000 : 12000);
     pending.set(id, { id, resolve: succeed, reject: fail, done, timer, tabId, type, sourceUrl });
     try { connect().postMessage({ id, type, data, scope }); }
     catch { clearTimeout(timer); pending.delete(id); fail(new Error('연결 프로그램을 실행하지 못했습니다.')); }
@@ -123,6 +123,18 @@ function cachedBlock(entry,block) {
   const parts=block.parts.filter(p=>!p.locked),texts=entry?.texts;
   if(!Array.isArray(texts)||texts.length!==parts.length||!texts.every(t=>typeof t==='string')||!texts.some(t=>t.trim()))return null;
   return {id:block.id,parts:parts.map((p,i)=>({id:p.id,text:texts[i]}))};
+}
+
+// Only flag long, unchanged Latin prose for targets that require another script.
+// Names, short labels, code and already-target-language text may stay unchanged.
+function untranslatedProse(block,output,language) {
+  const script={ko:/[가-힣]/,ja:/[\u3040-\u30ff\u3400-\u9fff]/,'zh-Hans':/[\u3400-\u9fff]/,'zh-Hant':/[\u3400-\u9fff]/}[language];
+  if(!script||!output?.parts)return false;
+  const editable=block.parts.filter(p=>!p.locked);
+  const normalize=text=>text.replace(/\s+/g,' ').trim();
+  const source=normalize(editable.map(p=>p.text).join(''));
+  const result=normalize(editable.map(p=>output.parts.find(t=>t.id===p.id)?.text??'').join(''));
+  return source.length>=80 && (source.match(/[A-Za-z]+/g)||[]).length>=12 && !script.test(source) && source===result;
 }
 
 function drainTranslations() {
@@ -169,7 +181,10 @@ async function translate(data, tabId, sourceUrl) {
     const admitted = Date.now();
     const check = () => { if (job.canceled || changingProvider) throw new Error('번역이 중지되었거나 AI 설정이 바뀌었습니다.'); };
     check();
-    const { scope,cacheScope=scope } = await translationSettings();
+    const settings=await translationSettings();
+    const { scope,cacheScope=scope } = settings;
+    const language=settings.providers?.codex?.targetLanguage||'ko';
+    const unchanged=(block,result)=>untranslatedProse(block,result,language);
     const key = 'page:' + await hash(JSON.stringify([CACHE_VERSION, cacheScope, data]));
     const cached = recentResults.get(key) || (await chrome.storage.local.get(key))[key];
     const session = await readReader(tabId, sourceUrl);
@@ -177,24 +192,33 @@ async function translate(data, tabId, sourceUrl) {
     check();
     if (session?.mode !== 'running' || tab.url?.split('#')[0] !== sourceUrl.split('#')[0]) throw new Error('번역이 중지되었거나 페이지가 바뀌었습니다.');
     const timings = {queueMs:admitted-arrived,prepareMs:Date.now()-admitted};
-    if (cached) return { ...cached.result, cached:true, timings:{...timings,totalRequestMs:Date.now()-arrived} };
+    if (cached && !data.blocks.some(b=>unchanged(b,cached.result?.blocks?.find(r=>r.id===b.id)))) return { ...cached.result, cached:true, timings:{...timings,totalRequestMs:Date.now()-arrived} };
     const blockKeys=await Promise.all(data.blocks.map(b=>blockCacheKey(b,data,sourceUrl,cacheScope)));
     const savedBlocks=await Promise.all(blockKeys.map(async key=>recentResults.get(key)||(await chrome.storage.local.get(key))[key]));
-    const restored=data.blocks.map((b,i)=>cachedBlock(savedBlocks[i],b));
+    const restored=data.blocks.map((b,i)=>{const result=cachedBlock(savedBlocks[i],b);return unchanged(b,result)?null:result;});
     const missing=data.blocks.filter((b,i)=>!restored[i]);
     check();
     if(!missing.length)return {blocks:restored,cached:true,timings:{...timings,totalRequestMs:Date.now()-arrived}};
     const sent = Date.now();
     job.nativeSent = true;
-    const fresh = await native('translate', {...data,blocks:missing}, tabId, sourceUrl, scope, job.id);
+    let fresh = await native('translate', {...data,blocks:missing}, tabId, sourceUrl, scope, job.id);
     check();
+    const retry=missing.filter(b=>unchanged(b,fresh.blocks?.find(r=>r.id===b.id)));
+    if(retry.length){
+      // One repair request, only for suspicious blocks. A second unchanged answer stops here.
+      const repaired=await native('translate',{...data,blocks:retry},tabId,sourceUrl,scope,job.id);
+      check();
+      fresh={...fresh,blocks:missing.map(b=>(retry.includes(b)?repaired:fresh).blocks?.find(r=>r.id===b.id)).filter(Boolean)};
+    }
     const result={...fresh,blocks:data.blocks.map((b,i)=>restored[i]||fresh.blocks?.find(v=>v.id===b.id)).filter(Boolean)};
+    result.untranslated=data.blocks.filter(b=>unchanged(b,result.blocks.find(r=>r.id===b.id))).map(b=>b.id);
     const entry = {time:Date.now(),result:{blocks:result.blocks}};
     const writes={};let validBlocks=0;
     // Only complete, valid blocks enter the reusable cache. Never cache partial errors.
     for(let i=0;i<data.blocks.length;i++) {
       const block=data.blocks[i],out=result.blocks.find(b=>b.id===block.id),parts=block.parts.filter(p=>!p.locked);
       if(!out||out.parts?.length!==parts.length)continue;
+      if(result.untranslated.includes(block.id))continue;
       const texts=parts.map(p=>out.parts.find(t=>t.id===p.id)?.text);
       if(!cachedBlock({texts},block))continue;
       validBlocks++;
@@ -235,7 +259,7 @@ async function testProvider() {
     const {scope} = await translationSettings();
     if (job.canceled || changingProvider) throw new Error('연결 테스트가 중지되었습니다.');
     job.nativeSent=true;
-    const result=await native('provider-test',undefined,undefined,undefined,scope,job.id);
+    const result=await native('account-check',undefined,undefined,undefined,scope,job.id);
     if (job.canceled || changingProvider) throw new Error('연결 테스트가 중지되었습니다.');
     return result;
   } finally {
@@ -259,7 +283,7 @@ async function saveProvider(data) {
       if (session) await chrome.storage.session.set({[key]:{...session,mode:'paused'}});
     })));
     const jobs = [...translationJobs.values()];
-    const tasks = [...pending.values()].filter(p => p.type === 'translate' || p.type === 'provider-test');
+    const tasks = [...pending.values()].filter(p => p.type === 'translate' || p.type === 'account-check');
     for (const job of jobs) job.canceled = true;
     const extraIds = tasks.filter(p => !translationJobs.has(p.id)).map(p => p.id);
     if (extraIds.length) await native('cancel',{ids:extraIds});
@@ -289,10 +313,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   else if (message.type === 'reader-get' && documentMessage) task = readReader(tabId, sourceUrl);
   else if (message.type === 'reader-set' && documentMessage) task = setReader(tabId, sourceUrl, message.data?.mode);
   else if (message.type === 'cancel' && tabId !== undefined) task = cancelTab(tabId);
+  else if (message.type === 'open-settings' && (documentMessage || extensionPage)) task = chrome.runtime.openOptionsPage();
   else if (message.type === 'health' && extensionPage) task = native('health');
   else if (message.type === 'login' && extensionPage) task = native('login');
   else if (['login-status','login-cancel'].includes(message.type) && extensionPage) task = native(message.type,message.data);
   else if (message.type === 'settings-get' && extensionPage) task = native('settings-get');
+  else if (['history-get','history-clear'].includes(message.type) && extensionPage) task = native(message.type);
   else if (message.type === 'settings-save' && extensionPage) task = saveProvider(message.data);
   else if (message.type === 'provider-test' && extensionPage) task = testProvider();
   else if (message.type === 'clear-cache' && extensionPage) task = cacheWrites.promise.catch(() => {}).then(async () => {

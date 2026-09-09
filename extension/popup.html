@@ -1,15 +1,14 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="popup.css"><title>술술</title></head>
 <body>
-<header><div class="brand"><img src="icons/icon-32.png" width="24" height="24" alt=""><strong>술술</strong></div><a href="options.html" target="_blank" aria-label="술술 설정">설정</a></header>
+<header><div class="brand"><img src="icons/icon-32.png" width="26" height="26" alt=""><strong>술술</strong></div><a class="settings-button" href="options.html" target="_blank" aria-label="술술 설정"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3-.5 2-2 .9-1.9-.6-2.5 4.3 1.5 1.4v2l-1.5 1.4 2.5 4.3 1.9-.6 2 .9.5 2h5l.5-2 2-.9 1.9.6 2.5-4.3-1.5-1.4v-2l1.5-1.4-2.5-4.3-1.9.6-2-.9-.5-2Z"/><circle cx="12" cy="12" r="3"/></svg>설정</a></header>
 <main>
 <div class="page-label">현재 페이지</div><h1 id="page-title">확인 중</h1>
 <div class="connection"><span id="connection-dot" class="status-dot"></span><span id="connection-text">연결 확인 중</span><span id="language"></span></div>
-<button class="primary" id="translate" disabled><span id="button-text">확인 중</span><span aria-hidden="true">→</span></button>
-<div class="sub-actions"><button id="restore" hidden>원문 보기</button><button id="end" hidden>번역 종료</button></div>
-<p id="progress" role="status" aria-live="polite"></p>
-<p id="hint" class="hint" hidden>다음 페이지도 자동 번역해요. 멈추려면 일시중지.</p>
+<div id="reading-status" role="status" aria-live="polite"><p id="progress"></p><p id="hint" hidden></p></div>
+<button class="primary" id="translate" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="start-icon" d="m9 5 10 7-10 7Z"/><path class="pause-icon" d="M9 6v12M15 6v12"/><path class="retry-icon" d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5"/></svg><span id="button-text">확인 중</span></button>
+<div class="sub-actions"><button id="restore" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h5c2 0 4 1 4 3v12c0-2-2-3-4-3H3Zm18 0h-5c-2 0-4 1-4 3v12c0-2 2-3 4-3h5Z"/></svg>원문 보기</button><button id="end" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>번역 종료</button></div>
 <section id="shortcut-prompt" hidden aria-labelledby="shortcut-heading"><h2 id="shortcut-heading">단축키로 실행할까요?</h2><p id="shortcut-help">Alt + Shift + S로 바로 시작할 수 있어요.</p><div class="choice"><button id="shortcut-yes">설정하기</button><button id="shortcut-no">사용 안 함</button></div></section>
 </main>
-<footer><button id="shortcut">단축키</button><a href="setup.html" target="_blank">사용 안내</a></footer>
+<footer><button id="shortcut">단축키</button><a href="history.html" target="_blank">사용 기록</a><a href="setup.html" target="_blank">사용 안내</a></footer>
 <script src="popup.js"></script></body></html>

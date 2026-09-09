@@ -24,7 +24,9 @@ async function handle(message) {
   if (typeof id !== 'string' || id.length > 100) return;
   try {
     if (message.type === 'health') return send({ id, ok: true, result: router.health() });
-    if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:translationCapacity()} });
+    if (message.type === 'settings-get') return send({ id, ok:true, result:{...settings.public(),maxConcurrentTranslations:translationCapacity(),connectionCheck:'account-only'} });
+    if (message.type === 'history-get') return send({id,ok:true,result:router.history.read()});
+    if (message.type === 'history-clear') return send({id,ok:true,result:router.history.clear()});
     if (message.type === 'settings-save') {
       if (loginSession?.active) throw new Error('계정 연결을 완료하거나 취소한 뒤 설정을 저장해 주세요.');
       if (active.size || saving) throw new Error('번역을 중지한 뒤 설정을 저장해 주세요.');
@@ -49,7 +51,7 @@ async function handle(message) {
         // two authentication sessions or race a settings write.
         saving=true;
         try {
-          const verify=signal=>router.translate({blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]},signal);
+          const verify=signal=>router.check(signal);
           const {AccountLoginSession}=await import('./account-login.mjs');
           loginSession=new AccountLoginSession(config,provider,verify);
           void loginSession.start();
@@ -62,20 +64,19 @@ async function handle(message) {
       const result=message.type==='login-cancel'?loginSession.cancel():loginSession.snapshot();
       return send({id,ok:true,result});
     }
-    if (!['translate','provider-test'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');
+    if (!['translate','provider-test','account-check'].includes(message.type)) throw new Error('지원하지 않는 요청입니다.');
     if (loginSession?.active) throw new Error('계정 연결을 완료한 뒤 번역을 시작해 주세요.');
     if (saving || active.size >= translationCapacity() || active.has(id)) throw new Error('다른 번역이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
     const task = { id, controller: new AbortController() };
     active.set(id,task);
     const started = performance.now();
     try {
-      const testing = message.type === 'provider-test';
-      const data = testing ? {blocks:[{id:'b0',parts:[{id:'t0',text:'Read comfortably, right where you are.',locked:false}]}]} : message.data;
+      const testing = message.type !== 'translate';
       const signal = testing ? AbortSignal.any([task.controller.signal,AbortSignal.timeout(60_000)]) : task.controller.signal;
-      const result = await router.translate(data,signal,message.scope);
+      const result = testing ? await router.check(signal) : await router.translate(message.data,signal,message.scope);
       if (signal.aborted) throw new Error('번역을 중지했습니다.');
       const timings = {...result.timings,hostTotalMs:Math.round(performance.now()-started)};
-      send({id,ok:true,result:testing ? {message:'연결 성공 · '+result.blocks[0].parts[0].text,timings} : {...result,timings}});
+      send({id,ok:true,result:{...result,timings}});
     }
     finally { active.delete(id); }
   } catch (e) { send({ id, ok: false, error: e.message }); }

@@ -20,7 +20,7 @@ try{
  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
  const web=await context.newPage();await web.goto('https://reader.test/article');
  const tab=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://reader.test/article'));
- const popup=await context.newPage();await popup.setViewportSize({width:328,height:650});
+ const popup=await context.newPage();await popup.setViewportSize({width:344,height:650});
  await popup.addInitScript(tab=>{chrome.tabs.query=async()=>[tab];},tab);
  const open=async()=>{await popup.goto('chrome-extension://'+id+'/popup.html');await popup.locator('#translate:not([disabled])').waitFor();};
  await open();assert.equal(await popup.locator('#button-text').innerText(),'번역 시작');await popup.locator('#language').filter({hasText:'English'}).waitFor();

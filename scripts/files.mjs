@@ -1,5 +1,8 @@
 // Explicit publication allowlist. Installed credentials and generated files never enter a release.
 export const runtimeFiles = [
+  'extension/history-charts.js',
+  'host/usage.mjs','host/history.mjs','extension/history.html','extension/history.css','extension/history.js',
+  'docs/images/reading-translated.png','docs/images/reading-original.png','docs/images/popup.png',
   'extension/icons/icon-16.png','extension/icons/icon-32.png','extension/icons/icon-48.png','extension/icons/icon-128.png',
   'LICENSE','README.md','PRIVACY.md','CHANGELOG.md','설치안내.txt','package.json','package-lock.json',
   'install.cmd','install.ps1','uninstall.cmd','uninstall.ps1',
@@ -10,6 +13,9 @@ export const runtimeFiles = [
   'host/core.mjs','host/runner.mjs','host/host.mjs','host/Launcher.cs','host/setup-runtime.mjs','host/translation.schema.json','host/provider-settings.mjs','host/providers.mjs'
 ];
 export const sourceFiles = [...runtimeFiles,
+  'tests/browser/completion.mjs',
+  'tests/history-charts.test.mjs',
+  'tests/history.test.mjs','tests/browser/history.mjs',
   'extension/icons/sulsul.svg','scripts/generate-icons.mjs',
   '.gitignore','.gitattributes','CONTRIBUTING.md','SECURITY.md',
   'docs/architecture.md','docs/publishing.md','docs/providers.md','docs/chrome-web-store.md',

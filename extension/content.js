@@ -1,6 +1,7 @@
 (() => {
   if (globalThis.__sulsul) return;
   const MAX_CONCURRENT_TRANSLATIONS = 4;
+  const UNTRANSLATED_MESSAGE='AI가 이 문단을 번역하지 않고 원문으로 돌려줬어요. 한 번 더 요청했지만 같아 자동 재시도를 멈췄어요.';
   // Mintlify renders prose paragraphs as direct spans, without p elements.
   const BLOCKS = 'h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,figcaption,blockquote,.mdx-content > span';
   const EXCLUDE = '[role="timer"],pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui],[data-sulsul-issue]';
@@ -32,6 +33,15 @@
   function refreshCounts() {
     complete = records.filter(r => r.applied).length;
     translated = complete > 0;
+  }
+
+  function retryIssue(element) {
+    const record=records.find(r=>r.element===element);
+    if(record?.status==='untranslated'){
+      record.status='new';clearIssue(element);
+      if(mode==='running'&&!failed){requestScan();return;}
+    }
+    startReading();
   }
 
   function restoreRecord(record) {
@@ -71,13 +81,13 @@
     `;
     const button=document.createElement('button');button.type='button';button.textContent='!';button.title=reason;button.setAttribute('aria-label','술술: 이 문단 번역 문제 · '+reason);button.setAttribute('aria-expanded','false');
     const detail=document.createElement('span');detail.className='detail';detail.hidden=true;detail.textContent=reason;
-    if(retryable){const retry=document.createElement('button');retry.type='button';retry.className='retry';retry.textContent='다시 시도';retry.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();startReading();});detail.append(retry);}
+    if(retryable){const retry=document.createElement('button');retry.type='button';retry.className='retry';retry.textContent='다시 시도';retry.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();retryIssue(element);});detail.append(retry);}
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));});
     root.append(style,button,detail);host._button=button;host._detail=detail;host._reason=reason;host._retryable=retryable;issueMarks.set(element,host);element.append(host);
   }
 
   function collect() {
-    for(const [element,mark] of issueMarks)if(!element.isConnected || mark._retryable)clearIssue(element);
+    for(const [element,mark] of issueMarks)if(!element.isConnected || (mark._retryable && !records.some(r=>r.element===element&&r.status==='untranslated')))clearIssue(element);
     const groups = new Map();
     const reading = new Map();
     const inferred = new WeakSet(), checked = new WeakSet();
@@ -153,6 +163,10 @@
     for (const [element, group] of groups) {
       const old = previous.get(element);
       if (old && reusable.has(old)) {
+        // A framework may replace text nodes with identical originals while AI is working.
+        // Rebinding repairs the snapshot, but the rejected application must also be queued again.
+        if(old.status==='skipped')old.status='new';
+        if(old.status==='untranslated'){skipped++;markIssue(element,UNTRANSLATED_MESSAGE,true);}
         if (/^H[1-6]$/.test(element.tagName)) heading = old.parts.map(p => p.source).join('');
         old.reading=reading.get(element);result.push(old); continue;
       }
@@ -337,8 +351,10 @@
         button.extra{position:absolute;top:4px;right:calc(100% + 10px);width:40px;height:40px;opacity:0;visibility:hidden;transform:translateX(8px) scale(.88)}
         button.end{right:calc(100% + 64px)}
         button.hide{right:calc(100% + 118px)}
+        button.settings{right:calc(100% + 172px)}
         :host([data-corner$="left"]) button.hide{left:calc(100% + 118px)}
-        section::before{content:'';position:absolute;top:0;bottom:0;right:100%;width:168px;visibility:hidden}
+        :host([data-corner$="left"]) button.settings{left:calc(100% + 172px)}
+        section::before{content:'';position:absolute;top:0;bottom:0;right:100%;width:222px;visibility:hidden}
         :host([data-corner$="left"]) section::before{right:auto;left:100%}
         section:hover,section:focus-within,section[data-error]{opacity:1}
         section:hover::before,section:focus-within::before{visibility:visible}
@@ -367,7 +383,7 @@
         .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
         @media(prefers-reduced-motion:reduce){section,button,button.extra{transition:none}}
       `;
-      const section = document.createElement('section'); section.setAttribute('aria-label','술술 번역');
+      const section = document.createElement('section'); section.setAttribute('aria-label','술술 네비게이션');
       const label = document.createElement('span'); label.className = 'sr-only'; label.setAttribute('role','status'); label.setAttribute('aria-live','polite');
       const alert = document.createElement('div'); alert.className='alert'; alert.setAttribute('role','alert'); alert.hidden=true;
       const action = document.createElement('button'); action.className='main'; action.addEventListener('click', () => { toggle(); });
@@ -387,9 +403,12 @@
       const closedEye='<path d="M3 8c2 4 5 6 9 6s7-2 9-6M5 11l-2 3M9 14l-1 3M15 14l1 3M19 11l2 3"/>';
       const hide=document.createElement('button');hide.className='hide extra';hide.dataset.label='숨기기';hide.title='버튼 숨기기 · 번역은 계속해요';hide.setAttribute('aria-label','버튼 숨기기');hide.append(icon(closedEye));
       const reveal=document.createElement('button');reveal.className='reveal';reveal.title='술술 버튼 다시 보기';reveal.setAttribute('aria-label','술술 버튼 다시 보기');reveal.append(icon(closedEye));
+      const settings=document.createElement('button');settings.className='settings extra';settings.dataset.label='설정';settings.setAttribute('aria-label','술술 설정');
+      settings.append(icon('<path d="m9.5 3-.5 2-2 .9-1.9-.6-2.5 4.3 1.5 1.4v2l-1.5 1.4 2.5 4.3 1.9-.6 2 .9.5 2h5l.5-2 2-.9 1.9.6 2.5-4.3-1.5-1.4v-2l1.5-1.4-2.5-4.3-1.9.6-2-.9-.5-2Z"/><circle cx="12" cy="12" r="3"/>'));
+      settings.addEventListener('click',()=>{send('open-settings').catch(error=>notify(error.message));});
       hide.addEventListener('click',()=>{toolbar.setAttribute('data-concealed','');reveal.focus({preventScroll:true});});
       reveal.addEventListener('click',()=>{toolbar.removeAttribute('data-concealed');action.focus({preventScroll:true});});
-      section.append(original,end,hide,action,label); shadow.append(style,alert,section,reveal);
+      section.append(original,end,hide,settings,action,label); shadow.append(style,alert,section,reveal);
       toolbar._hide=hide;toolbar._reveal=reveal;
       toolbar._label = label; toolbar._original = original; toolbar._action = action; toolbar._end = end;
       toolbar._section=section; toolbar._alert=alert; toolbar._stateText=stateText; toolbar._actionText=actionText;
@@ -403,7 +422,7 @@
     toolbar._section.toggleAttribute('data-error',failed);
     toolbar._section.toggleAttribute('data-paused',mode === 'paused');
     const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
-    toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
+    toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : skipped ? '일부 문단 확인 필요' : translated ? '번역 완료' : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
     toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
     toolbar._action.dataset.label = actionText;
@@ -533,6 +552,7 @@
     const inFlight = new Map();
     let affected = [];
     const stats = measurements;
+    let completionChecks=0,hadRequests=false;
     try {
       dirty = true;
       while (true) {
@@ -547,12 +567,25 @@
           const data = {page,before:records[first-1]?.parts.map(p=>p.source).join('').slice(-1000)||'',after:records[last]?.parts.map(p=>p.source).join('').slice(0,1000)||'',blocks:current.map(serialize)};
           for (const r of current) r.status='pending';
           const id = current[0].id, sent = performance.now();
+          hadRequests=true;
           if (stats) { stats.requests++; stats.totalMs=null; }
           // Resolve failures as values so every in-flight response is observed.
           const task = send('translate',data).then(out => ({id,current,out,sent}),error => ({id,current,error}));
           inFlight.set(id,task);
         }
-        if (!inFlight.size) { if (dirty) continue; break; }
+        if (!inFlight.size) {
+          if (dirty) continue;
+          // Give rendering a moment to settle, then collect once more before reporting completion.
+          // Bounded per run; unchanged records retain results and never become new AI requests.
+          if(hadRequests&&completionChecks<2){
+            completionChecks++;
+            notify('빠진 문단이 있는지 확인하고 있어요…');
+            await new Promise(resolve=>setTimeout(resolve,250));
+            if(run!==token||mode!=='running'||currentUrl!==pageUrl())return;
+            dirty=true;continue;
+          }
+          break;
+        }
         notify(`번역 항목 ${complete} / ${records.length}개 · 이어서 읽고 있어요…`);
         const finished = await Promise.race(inFlight.values());
         inFlight.delete(finished.id);
@@ -564,6 +597,11 @@
         const applyStarted = performance.now();
         for (const r of current) {
           affected = [r];
+          if(out.untranslated?.includes(r.id)){
+            if(unchanged(r,'original')){r.status='untranslated';r.result=null;markIssue(r.element,UNTRANSLATED_MESSAGE,true);}
+            else r.status='skipped';
+            dirty=true;continue;
+          }
           if (!apply(r,out.blocks.find(b => b.id === r.id))) { r.status='skipped'; dirty=true; }
         }
         refreshCounts();
@@ -577,7 +615,7 @@
       }
       busy=false;
       if (stats && stats.totalMs === null) stats.totalMs=Math.round(performance.now()-stats.startedAt);
-      notify(!records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `너무 긴 번역 항목 ${skipped}개는 원문을 유지했어요.` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
+      notify(skipped ? `번역 항목 ${skipped}개는 확인이 필요해요. 문단의 ! 표시를 확인해 주세요.` : !records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
     } catch(e) {
       if (run !== token) return;
       failed=true;

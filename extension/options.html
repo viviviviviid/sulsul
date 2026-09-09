@@ -4,6 +4,7 @@
 <header><a href="setup.html" class="wordmark">술술<span>●</span></a><a href="setup.html">사용 안내</a></header>
 <h1>설정</h1>
 <p class="intro">언어와 모델을 선택하세요.</p>
+<section class="card"><div class="row"><div><strong>사용 기록</strong><p class="help">모델·입력·출력 토큰과 API 환산액을 확인하세요.</p></div><a href="history.html">기록 보기 →</a></div></section>
 <form id="settings"><fieldset id="fields" disabled>
 <p class="note">ChatGPT 계정의 Codex 이용 한도를 사용합니다.</p>
 <div class="actions"><button id="login" class="primary" type="button">ChatGPT 연결</button><button id="test" type="button">연결 확인</button></div>
@@ -23,13 +24,13 @@
 <option value="custom">직접 입력</option>
 </select>
 <div id="custom-model" hidden><label for="model">모델 ID</label><input id="model" maxlength="160" required spellcheck="false" autocomplete="off" value="default"></div>
-<p class="help">계정에서 이용 가능한 모델만 사용할 수 있어요. 저장 후 ‘연결 확인’으로 확인해 주세요.</p>
+<p class="help">계정에서 이용 가능한 모델만 사용할 수 있어요. 모델 사용 가능 여부는 실제 번역할 때 확인됩니다.</p>
 <label class="checkbox"><input id="fast" type="checkbox">Fast 모드</label>
 <p class="help">지원 모델에서 속도가 빨라지고 사용량이 더 차감됩니다.</p>
 <button id="save" type="submit">설정 저장</button>
 </div></fieldset></form>
 <p id="status" role="status" aria-live="polite">연결 프로그램을 확인하고 있어요.</p>
-<p class="footnote">설정을 저장하면 번역이 일시중지돼요. 연결 확인은 계정 사용량을 소모합니다.</p>
+<p class="footnote">설정을 저장하면 번역이 일시중지돼요. 연결 확인은 로그인 상태만 확인하며 AI를 호출하지 않습니다.</p>
 <section class="card"><div class="row"><div><strong>실행 단축키</strong><p id="shortcut-state" class="help">확인 중</p></div><button id="shortcut-settings" type="button">변경</button></div><hr style="border:0;border-top:1px solid #eee;margin:18px 0"><div class="row"><div><strong>저장된 번역</strong><p class="help">다시 읽을 때 같은 번역을 재사용해요.</p></div><button id="clear-cache" type="button">지우기</button></div></section><details><summary>어떤 내용이 전달되나요?</summary><p>읽기를 켠 페이지의 번역 대상 텍스트와 주변 문맥, 페이지 제목·주소를 ChatGPT 연결을 통해 OpenAI에 보냅니다. 술술 자체 서버는 없습니다. 번역 결과는 이 Chrome 프로필에 저장되며 위에서 지울 수 있어요.</p></details>
 <footer><a href="setup.html">설치 · 문제 해결</a><span>술술 · MIT Open Source</span></footer>
 <script src="options.js"></script></main></body></html>

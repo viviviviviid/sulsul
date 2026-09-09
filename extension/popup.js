@@ -4,11 +4,15 @@ async function rpc(type){const reply=await chrome.runtime.sendMessage({type});if
 function render(){
  const connected=connection==='ready';
  $('translate').disabled=working||connection==='checking'||(connected&&!available);
- $('button-text').textContent=connection==='checking'?'연결 확인 중':connection==='install'?'연결 프로그램 설치':connection==='login'?'ChatGPT 연결':!available?'웹페이지에서 실행해 주세요':reader.failed?'다시 시도':reader.mode==='running'?'일시중지':reader.mode==='paused'?'이어서 번역':'번역 시작';
+ $('button-text').textContent=connection==='checking'?'연결 확인 중':connection==='install'?'연결 프로그램 설치':connection==='login'?'ChatGPT 연결':!available?'웹페이지에서 실행해 주세요':reader.failed?'다시 시도':reader.mode==='running'?'자동 번역 일시중지':reader.mode==='paused'?'이어서 번역':'번역 시작';
+ $('translate').dataset.action=connected&&available?(reader.failed?'retry':reader.mode==='running'?'pause':'start'):'start';
  $('restore').hidden=!connected||!reader.translated;
  $('end').hidden=!connected||!reader.mode||reader.mode==='off';
- $('hint').hidden=!connected||!available||reader.failed;
- $('progress').textContent=reader.failed?reader.message:reader.skipped?'번역하지 못한 문단의 ! 표시를 확인해 주세요.':reader.busy?'번역 중 · '+reader.complete+' / '+reader.total:reader.mode==='paused'?'자동 번역을 멈췄어요.':reader.translated?'번역 완료':'';
+ $('hint').hidden=!connected||!available||reader.failed||!!reader.skipped||reader.mode!=='running'||reader.busy||reader.waiting;
+ $('hint').textContent='다음 페이지도 자동으로 번역합니다.';
+ $('progress').textContent=reader.failed?reader.message:reader.skipped?'번역하지 못한 문단의 ! 표시를 확인해 주세요.':reader.busy?'번역 중 · '+reader.complete+' / '+reader.total:reader.mode==='paused'?'자동 번역 일시중지':reader.waiting?'페이지를 준비하고 있어요.':reader.translated?'번역 완료':reader.mode==='running'?'자동 번역 켜짐':'';
+ $('reading-status').hidden=!connected||!available||!$('progress').textContent;
+ $('reading-status').dataset.tone=reader.failed?'error':reader.skipped?'warning':reader.mode==='running'&&!reader.busy&&!reader.waiting?'success':'neutral';
 }
 async function act(type){if(!available||working)return;working=true;render();try{reader=await chrome.tabs.sendMessage(tabId,{type});}catch{reader.failed=true;reader.message='페이지를 새로고침하고 다시 실행해 주세요.';}finally{working=false;render();}}
 async function loadConnection(){
@@ -43,6 +47,6 @@ async function init(){
  if(Number.isInteger(tab?.id)&&/^https?:/.test(tab.url||'')){tabId=tab.id;try{await chrome.scripting.executeScript({target:{tabId},files:['content.js']});reader=await chrome.tabs.sendMessage(tabId,{type:'sulsul-state'});available=true;}catch{}}
  render();await loadConnection();
 }
-init().catch(()=>{$('progress').textContent='팝업을 닫고 다시 열어 주세요.';});
+init().catch(()=>{$('reading-status').hidden=false;$('reading-status').dataset.tone='error';$('progress').textContent='팝업을 닫고 다시 열어 주세요.';});
 shortcuts().catch(()=>{$('shortcut').textContent='단축키 설정';});
 window.addEventListener('focus',()=>{shortcuts().catch(()=>{});loadConnection().catch(()=>{});});

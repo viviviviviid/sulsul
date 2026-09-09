@@ -31,10 +31,10 @@ test('native host runs four requests, cancels only the requested job, and guards
       }
     });`);
   const extensionId='a'.repeat(32);
-  for(const name of ['host.mjs','core.mjs','runner.mjs','provider-settings.mjs','providers.mjs','account-runtime.mjs','account-providers.mjs','translation.schema.json']){
+  for(const name of ['host.mjs','core.mjs','runner.mjs','provider-settings.mjs','providers.mjs','account-runtime.mjs','account-providers.mjs','account-login.mjs','history.mjs','usage.mjs','translation.schema.json']){
     let source=fs.readFileSync(new URL('../host/'+name,import.meta.url),'utf8');
     if(name==='account-runtime.mjs')source=source.replace("cli:path.join(root,definition.version,binary)","cli:process.execPath");
-    if(name==='account-providers.mjs')source=source.replace('args=codexArguments()','args='+JSON.stringify([fake])).replace('args:codexArguments(provider.fast===true)','args:'+JSON.stringify([fake]));
+    if(name==='account-providers.mjs')source=source.replace('args=codexArguments()','args='+JSON.stringify([fake])).replace('args:codexArguments(provider.fast===true)','args:'+JSON.stringify([fake])).replace('args:codexArguments(false)','args:'+JSON.stringify([fake]));
     fs.writeFileSync(path.join(directory,name),source);
   }
   fs.writeFileSync(path.join(directory,'config.json'),JSON.stringify({extensionId,profile:directory,schema:path.join(directory,'host','translation.schema.json')}));
@@ -75,6 +75,20 @@ test('native host runs four requests, cancels only the requested job, and guards
     const completed=await second;assert.equal(completed.ok,true);
     assert.equal(completed.result.blocks[0].id,'b2');
     assert.ok(completed.result.timings.hostTotalMs>=0);
+    const history=(await rpc('history','history-get')).result.entries;
+    assert.equal(history.length,4);assert.equal(history.filter(e=>e.status==='canceled').length,1);
+    assert.equal(history.filter(e=>e.status==='success').length,3);assert.ok(history.every(e=>e.usage===null),'missing usage is not zero');
+    assert.equal((await rpc('clear-history','history-clear')).ok,true);
+    assert.equal((await rpc('empty-history','history-get')).result.entries.length,0);
+    for(const type of ['account-check','provider-test']){
+      const check=await rpc(type,type);assert.equal(check.ok,true);assert.match(check.result.message,/AI를 호출하지/);
+    }
+    assert.equal((await rpc('history-after-auth','history-get')).result.entries.length,0,'login checks create no translation history or AI usage');
+    const login=await rpc('login','login');assert.equal(login.ok,true);
+    let session=login.result;const loginDeadline=Date.now()+2000;
+    while(session.state!=='connected'&&Date.now()<loginDeadline){await new Promise(r=>setTimeout(r,10));session=(await rpc('login-state','login-status',{sessionId:session.sessionId})).result;}
+    assert.equal(session.state,'connected');
+    assert.equal((await rpc('history-after-login','history-get')).result.entries.length,0,'login verification does not translate a sample');
     assert.equal((await rpc('saved','settings-save',{provider:'codex',model:'next'})).ok,true);
     assert.equal((await rpc('settings','settings-get')).result.providers.codex.model,'next');
     assert.equal((await rpc('removed','settings-save',{provider:'claude',model:'sonnet'})).ok,false);

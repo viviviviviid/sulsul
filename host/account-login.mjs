@@ -48,7 +48,7 @@ export class AccountLoginSession {
   submit(){throw new Error('인증 코드는 공식 로그인 창에서만 입력해 주세요.');}
   async check(){
     if(!this.active||this.state==='verifying')return;
-    this.state='verifying';this.message=`짧은 예문으로 ${this.label} 연결을 확인하고 있어요.`;this.dispose();
+    this.state='verifying';this.message=`${this.label} 로그인 상태를 확인하고 있어요. AI를 호출하지 않습니다.`;this.dispose();
     try{
       await this.verify(AbortSignal.any([this.controller.signal,AbortSignal.timeout(60_000)]));
       if(this.controller.signal.aborted)return;

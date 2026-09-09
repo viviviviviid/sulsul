@@ -15,9 +15,9 @@ function worker(maxConcurrentTranslations=2,local={}){
     calls.push(message);events.push(message.type);
     const answer=result=>queueMicrotask(()=>callbacks.nativeMessage({id:message.id,ok:true,result}));
     if(message.type==='settings-get')answer({selected:'codex',scope,maxConcurrentTranslations});
-    else if(message.type==='translate'||message.type==='provider-test'){
+    else if(message.type==='translate'||message.type==='account-check'){
       sequence++;
-      if(message.data?.hold||message.type==='provider-test')held.set(message.id,()=>{held.delete(message.id);events.push('canceled-translation-finished');answer({blocks:[]});});
+      if(message.data?.hold||message.type==='account-check')held.set(message.id,()=>{held.delete(message.id);events.push('canceled-translation-finished');answer({blocks:[]});});
       else answer({blocks:message.data.blocks.map(b=>({id:b.id,parts:b.parts.filter(p=>!p.locked).map(p=>({id:p.id,text:'번역 '+p.text}))})),sequence});
     }else if(message.type==='cancel'){answer({});setTimeout(()=>{for(const id of message.data?.ids || held.keys())held.get(id)?.();},20);}
     else if(message.type==='settings-save'){scope='second';answer({scope});}
@@ -54,7 +54,7 @@ test('provider and model scopes prevent reusing a previous AI cache',async()=>{
 });
 test('webpage content scripts cannot read or change keys, login, or run probes',()=>{
   const w=worker(),sender={id:'test',url:'https://example.com/page',tab:{id:7}};
-  for(const type of ['settings-get','settings-save','provider-test','ollama-models','login','login-status','login-code','login-cancel','health'])assert.equal(w.callbacks.message({type,data:{apiKey:'fake'}},sender,()=>assert.fail('privileged webpage reply')),undefined);
+  for(const type of ['history-get','history-clear','settings-get','settings-save','account-check','provider-test','ollama-models','login','login-status','login-code','login-cancel','health'])assert.equal(w.callbacks.message({type,data:{apiKey:'fake'}},sender,()=>assert.fail('privileged webpage reply')),undefined);
   assert.equal(w.calls.length,0);
 });
 
@@ -131,11 +131,11 @@ test('connection tests share translation slots and are not canceled by another t
   await until(()=>w.held.size===2);
   const probe=w.context.testProvider();
   await new Promise(r=>setTimeout(r,20));
-  assert.equal(w.calls.filter(c=>c.type==='provider-test').length,0);
+  assert.equal(w.calls.filter(c=>c.type==='account-check').length,0);
   // Asynchronous hashing can dispatch the second caller before the first.
   const first=w.calls.find(call=>call.type==='translate'&&call.data.before==='first');
   w.held.get(first.id)();await a;
-  await until(()=>w.calls.some(c=>c.type==='provider-test'));
+  await until(()=>w.calls.some(c=>c.type==='account-check'));
   assert.equal(w.held.size,2);
   await w.context.cancelTab(1);assert.match((await b).message,/중지/);
   assert.equal(w.held.size,1,'tab cancellation preserves the settings probe');
@@ -161,10 +161,10 @@ test('four slots cover multiple tabs and probes without dispatching canceled que
   const probe=w.context.testProvider();
   await new Promise(r=>setTimeout(r,20));
   assert.equal(w.calls.filter(c=>c.type==='translate').length,4);
-  assert.equal(w.calls.filter(c=>c.type==='provider-test').length,0);
+  assert.equal(w.calls.filter(c=>c.type==='account-check').length,0);
   await w.context.cancelTab(1);
   for(const job of [jobs[0],jobs[1],queued])assert.match((await job).message,/중지/);
-  await until(()=>w.calls.some(c=>c.type==='provider-test'));
+  await until(()=>w.calls.some(c=>c.type==='account-check'));
   assert.equal(w.held.size,3,'other tab and probe survive');
   for(const finish of [...w.held.values()])finish();
   await Promise.all([...jobs,probe]);
@@ -220,4 +220,36 @@ test('navigation is shared across documents of one origin, while prose and other
  const third='https://other.example/page';w.setURL(third);await w.context.setReader(7,third,'running');
  await w.context.translate({blocks:[block('navigation')]},7,third);
  assert.equal(w.calls.filter(c=>c.type==='translate').length,3);
+});
+
+test('unchanged long English prose is repaired once, while valid blocks and cached translations are preserved',async()=>{
+ const w=worker();await w.context.setReader(7,'https://example.com/page','running');
+ const text='The Routescan AI Agent now connects our native explorer APIs with GeckoTerminal and Moralis to give you an all-in-one on-chain terminal inside the explorer.';
+ const data={blocks:[{id:'b0',parts:[{id:'t0',text,locked:false}]},{id:'b1',parts:[{id:'t0',text:'Useful details',locked:false}]}]};
+ let attempts=[];const original=w.context.native;
+ w.context.native=async(type,data,...args)=>{
+  if(type!=='translate')return original(type,data,...args);
+  attempts.push(data.blocks.map(b=>b.id));
+  return {blocks:data.blocks.map(b=>({id:b.id,parts:[{id:'t0',text:b.id==='b0'&&attempts.length===1?text:'번역 결과'}]}))};
+ };
+ const result=await w.context.translate(data,7,'https://example.com/page');
+ assert.deepEqual(attempts,[['b0','b1'],['b0']]);assert.equal(result.untranslated.length,0);
+ assert.equal(result.blocks[0].parts[0].text,'번역 결과');
+ const cached=await w.context.translate(data,7,'https://example.com/page');assert.equal(cached.cached,true);assert.equal(attempts.length,2);
+});
+
+test('unchanged prose stops after one repair, rejects stale unchanged cache and respects target language',async()=>{
+ const w=worker();await w.context.setReader(7,'https://example.com/page','running');
+ const text='The Routescan AI Agent now connects our native explorer APIs with GeckoTerminal and Moralis to give you an all-in-one on-chain terminal inside the explorer.';
+ const data={blocks:[{id:'b0',parts:[{id:'t0',text,locked:false}]}]};
+ const blockKey=await w.context.blockCacheKey(data.blocks[0],data,'https://example.com/page','first');w.local[blockKey]={texts:[text]};
+ let calls=0,language='ko';const original=w.context.native;
+ w.context.native=async(type,data,...args)=>{
+  if(type==='settings-get')return {...await original(type,data,...args),providers:{codex:{targetLanguage:language}}};
+  if(type!=='translate')return original(type,data,...args);
+  calls++;return {blocks:data.blocks.map(b=>({id:b.id,parts:b.parts.map(p=>({id:p.id,text:p.text}))}))};
+ };
+ const result=await w.context.translate(data,7,'https://example.com/page');assert.equal(calls,2);assert.equal(result.untranslated[0],'b0');
+ language='en';const english=await w.context.translate(data,7,'https://example.com/page');assert.equal(english.cached,true);assert.equal(calls,2);
+ assert.equal(w.context.untranslatedProse({parts:[{text:'Routescan AI Agent',locked:false}]},{parts:[{id:undefined,text:'Routescan AI Agent'}]},'ko'),false);
 });

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>술술 · 사용 기록</title><link rel="stylesheet" href="options.css"><link rel="stylesheet" href="history.css"></head>
+<body><main>
+<header><a class="wordmark" href="options.html">술술</a><a href="options.html">설정으로 돌아가기</a></header>
+<h1>사용 기록</h1><p class="intro">술술에서 사용한 AI 요청과 토큰을 확인하세요.</p>
+<div class="filters"><label>기간<select id="period"><option value="today">오늘</option><option value="7">최근 7일</option><option value="30" selected>최근 30일</option></select></label><label>모델<select id="model"><option value="all">모든 모델</option></select></label><button id="refresh">새로고침</button><button id="export" disabled>CSV 내보내기</button></div>
+<p id="status" role="status" aria-live="polite">기록을 불러오고 있어요.</p>
+<div class="totals"><article><span>AI 요청</span><strong id="request-total">—</strong><small id="request-detail"></small></article><article><span>입력 토큰 · Input</span><strong id="input-total">—</strong><small id="input-detail"></small></article><article><span>출력 토큰 · Output</span><strong id="output-total">—</strong><small id="output-detail"></small></article><article><span>API 환산 참고액 · USD</span><strong id="cost-total">—</strong><small id="cost-detail"></small></article></div>
+<p class="notice"><strong>실제 청구액이 아닙니다.</strong> ChatGPT 구독의 Codex 한도를 사용합니다. API 환산액은 확인된 모델·토큰에 공개 API 단가를 적용한 참고치이며, 구독 한도의 남은 비율을 뜻하지 않습니다.</p>
+<section class="charts" aria-label="사용량 차트">
+<div class="chart-toolbar"><div><h2>사용량 한눈에 보기</h2><p id="chart-coverage" aria-live="polite"></p></div><label>차트 지표<select id="chart-metric"><option value="tokens">전체 토큰</option><option value="input">입력 토큰</option><option value="output">출력 토큰</option><option value="requests">요청 수</option><option value="cost">API 환산액</option><option value="duration">평균 처리 시간</option></select></label></div>
+<article class="chart-card trend-card"><h3 id="trend-title">날짜별 전체 토큰</h3><div id="trend-chart"></div></article>
+<div class="chart-columns"><article class="chart-card"><div class="chart-card-heading"><h3>기준별 비교</h3><label class="sr-only" for="chart-group">비교 기준</label><select id="chart-group"><option value="model">모델별</option><option value="site">사이트별</option><option value="fast">Fast 설정별</option><option value="kind">요청 종류별</option></select></div><div id="breakdown-chart" class="bar-chart"></div><p id="breakdown-note" class="chart-hint"></p></article><article class="chart-card"><h3>요청 결과</h3><p class="chart-hint">선택한 기간·모델의 전체 요청 기준</p><div id="status-chart" class="bar-chart"></div></article></div>
+</section>
+<h2 class="history-table-title">요청 내역</h2>
+<div class="table-wrap"><table><caption class="sr-only">번역 요청별 사용 기록</caption><thead><tr><th>시간 · 사이트</th><th>모델</th><th>상태</th><th>Input</th><th>Output</th><th>API 환산액</th><th>소요 시간</th></tr></thead><tbody id="rows"></tbody></table><p id="empty" hidden>아직 사용 기록이 없어요. 업데이트 후 AI에 요청한 번역부터 기록됩니다.</p></div>
+<div class="pagination"><button id="previous" disabled>이전</button><span id="page-label"></span><button id="next" disabled>다음</button></div>
+<details><summary>기록과 비용은 어떻게 계산하나요?</summary><ul>
+<li>이 PC의 술술 연결 프로그램에서 최근 30일·최대 1,000건을 보관합니다. 이전 사용량은 복원하지 않습니다. 계정 전체나 다른 앱의 사용량은 포함하지 않습니다.</li>
+<li>한 요청은 여러 문단을 묶은 번역일 수 있습니다. 저장된 번역을 재사용하면 AI를 호출하지 않아 기록에도 추가하지 않습니다. 이전 버전에서 발생한 로그인·연결 확인 번역은 별도로 표시합니다. 0.12.3부터 로그인·연결 확인은 AI를 호출하지 않아 사용 기록에 추가되지 않습니다.</li>
+<li>입력 토큰에는 AI 캐시 읽기·쓰기 토큰이, 출력 토큰에는 추론 토큰이 포함됩니다. 세부 항목을 합계에 다시 더하지 않습니다.</li>
+<li>토큰을 전달받지 못하면 ‘미확인’으로 남깁니다. 실패·취소된 요청도 토큰을 사용했을 수 있습니다. 합계는 확인된 기록만 더한 값입니다.</li>
+<li>API 환산액은 2026-09-09 확인한 공개 단가를 기록 시점에 적용합니다. 기본 모델 이름과 Fast 설정, AI 캐시 읽기·쓰기를 반영합니다. 실제 적용 여부가 확인되지 않은 Fast는 설정값 기준입니다. Spark·미등록 모델·모델 전환·입력 272K 초과 등 산정할 수 없는 요청은 비용을 표시하지 않습니다. 할인·세금·환율은 반영하지 않습니다. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">공식 API 단가</a></li>
+<li>문서 본문·번역문·페이지 제목·전체 주소·로그인 정보는 기록하지 않습니다. 사이트 도메인만 저장합니다.</li>
+</ul></details>
+<footer><span>기록 조회와 내보내기는 AI를 호출하지 않습니다.</span><button id="clear">기록 지우기</button></footer>
+<dialog id="clear-dialog"><h2>사용 기록을 모두 지울까요?</h2><p>삭제한 기록은 복구할 수 없습니다. 진행 중인 요청은 완료되면 새 기록으로 남을 수 있습니다.</p><div class="actions"><button id="cancel-clear">취소</button><button id="confirm-clear" class="danger">모두 지우기</button></div></dialog>
+<script type="module" src="history.js"></script></main></body></html>

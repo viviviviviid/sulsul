@@ -1,0 +1,38 @@
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';import {chromium} from 'playwright';
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-history-ui-')),ext=path.join(root,'extension');fs.cpSync('extension',ext,{recursive:true});
+const sample=Array.from({length:55},(_,i)=>({id:String(i),startedAt:Date.now()-i*60000,kind:'translation',site:'docs.example.com',model:'gpt-5.6-luna',modelResolved:true,fast:false,status:'success',blocks:4,durationMs:2300,usage:{inputTokens:1000,cachedInputTokens:200,cacheWriteInputTokens:300,outputTokens:100,reasoningOutputTokens:40,totalTokens:1100},cost:{usd:.000299,priceDate:'2026-09-09',basis:'standard'}}));
+sample.push({id:'spark',startedAt:Date.now(),kind:'connection-check',site:'',model:'gpt-5.3-codex-spark',modelResolved:true,status:'failed',blocks:1,usage:null,cost:null});
+sample.push({id:'csv',startedAt:Date.now()-2*86400000,kind:'translation',site:'=HYPERLINK("unsafe")',model:'<img src=x onerror=alert(1)>',modelResolved:false,status:'canceled',blocks:1,usage:null,cost:null});
+fs.appendFileSync(path.join(ext,'background.js'),`\nglobalThis.qaHistory=${JSON.stringify(sample)};globalThis.qaHistoryCalls=[];native=async type=>{qaHistoryCalls.push(type);if(type==='history-get')return {entries:qaHistory,days:30,limit:1000};if(type==='history-clear'){qaHistory=[];return {};}throw new Error('Unexpected AI request');};`);
+const context=await chromium.launchPersistentContext(path.join(root,'profile'),{channel:'chromium',headless:true,acceptDownloads:true,viewport:{width:1280,height:950},args:['--disable-extensions-except='+ext,'--load-extension='+ext]});
+try{
+ const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host,page=await context.newPage();
+ await page.goto('chrome-extension://'+id+'/history.html');await page.locator('#request-total').filter({hasText:'57'}).waitFor();
+ assert.equal(await page.locator('#input-total').innerText(),'55,000');assert.equal(await page.locator('#output-total').innerText(),'5,500');assert.equal(await page.locator('#rows tr').count(),50);
+ assert.equal(await page.locator('#cost-detail').innerText(),'산정 가능 55 / 57건');
+ assert.match(await page.locator('#chart-coverage').innerText(),/확인 55 \/ 57건/);
+ assert.match(await page.locator('#breakdown-chart').innerText(),/60,500/);
+ assert.ok(Math.abs(parseFloat(await page.locator('#status-chart .bar-fill').first().evaluate(e=>e.style.width))-55/57*100)<.001,'status bar width reflects percentage of all requests');
+ await page.locator('#chart-metric').selectOption('cost');
+ assert.equal(await page.locator('#breakdown-chart .bar-fill').first().evaluate(e=>e.style.width),'100%','small USD amounts use a proportional scale');
+ await page.locator('#chart-group').selectOption('site');assert.match(await page.locator('#breakdown-chart').innerText(),/docs.example.com/);
+ assert.equal(await page.locator('#breakdown-chart img').count(),0);
+ await page.locator('#chart-group').selectOption('fast');assert.match(await page.locator('#breakdown-chart').innerText(),/일반 요청/);
+ await page.locator('#chart-metric').selectOption('duration');assert.match(await page.locator('#breakdown-chart').innerText(),/2.3초/);
+ await page.locator('#chart-group').selectOption('model');await page.locator('#chart-metric').selectOption('tokens');
+ await page.locator('.charts').screenshot({path:path.join(root,'charts.png')});
+ await page.screenshot({path:path.join(root,'history.png')});
+ await page.locator('#next').click();assert.equal(await page.locator('#rows tr').count(),7);assert.equal(await page.locator('#rows img').count(),0);
+ const downloaded=page.waitForEvent('download');await page.locator('#export').click();const download=await downloaded;const csv=fs.readFileSync(await download.path(),'utf8');assert.ok(csv.includes("'=HYPERLINK"),'CSV formula injection is escaped');
+ await page.locator('#model').selectOption('gpt-5.3-codex-spark');assert.equal(await page.locator('#request-total').innerText(),'1');assert.equal(await page.locator('#input-total').innerText(),'—');assert.equal(await page.locator('#cost-total').innerText(),'—');
+ assert.match(await page.locator('#breakdown-chart').innerText(),/미확인/);assert.match(await page.locator('#chart-coverage').innerText(),/확인 0 \/ 1건/);
+ await page.locator('#model').selectOption('all');await page.locator('#period').selectOption('today');assert.ok(Number((await page.locator('#request-total').innerText()).replaceAll(',',''))<=56);
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(root,'history-mobile.png')});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ assert.equal(await page.locator('#trend-title').innerText(),'시간별 전체 토큰');
+ await page.locator('#clear').click();await page.locator('#cancel-clear').click();assert.equal(await page.locator('#clear-dialog').isVisible(),false);
+ await page.locator('#clear').click();await page.locator('#confirm-clear').click();await page.locator('#empty').waitFor({state:'visible'});assert.equal(await page.locator('#request-total').innerText(),'0');assert.equal(await page.locator('#export').isDisabled(),true);
+ assert.ok((await worker.evaluate(()=>qaHistoryCalls)).every(type=>['history-get','history-clear'].includes(type)),'history UI never calls AI');
+ assert.match(await page.locator('#trend-chart').innerText(),/기록이 없어요/);
+ console.log('PASS usage totals, unknown usage/prices, filters, pagination, safe CSV, deletion and no AI calls. Screenshots: '+root);
+}finally{await context.close();}

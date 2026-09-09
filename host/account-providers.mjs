@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {buildPrompt,parseTranslation,translationSchema,TARGET_LANGUAGES,validateTargetLanguage} from './core.mjs';
 import {accountPaths,accountEnvironment} from './account-runtime.mjs';
+import {normalizeUsage,estimateCost} from './usage.mjs';
 
 export function accountError(id,text='') {
   const label='ChatGPT';
@@ -51,18 +52,37 @@ export class CodexConnection extends EventEmitter {
       this.child.stdin.write(JSON.stringify({id,method,params})+'\n');
     });
   }
-  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.11.1'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
+  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.12.3'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
   close(error=accountError('codex')) {
     if(this.closed)return;this.closed=true;
     for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(error);}this.pending.clear();
     try{this.child.kill();}catch{}this.emit('closed',error);
   }
 }
+export async function checkAccountConnection(config,signal,{Connection=CodexConnection}={}) {
+  const runtime=accountPaths(config,'codex');
+  if(!fs.existsSync(runtime.cli))throw new Error('ChatGPT 설정에서 계정 연결을 먼저 눌러 주세요.');
+  const deadline=AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(60_000)]);
+  const client=new Connection(runtime,{args:codexArguments(false)}),abort=()=>client.close(new Error('연결 확인을 중지했습니다.'));
+  deadline.addEventListener('abort',abort,{once:true});
+  try{
+    if(deadline.aborted)throw new Error('연결 확인을 중지했습니다.');
+    await client.initialize();
+    const auth=await client.request('account/read',{refreshToken:true},45_000);
+    if(deadline.aborted)throw new Error('연결 확인을 중지했습니다.');
+    if(auth.account?.type!=='chatgpt')throw accountError('codex','subscription');
+    fs.writeFileSync(path.join(runtime.profile,'verified.json'),JSON.stringify({at:Date.now()}));
+    return {message:'ChatGPT 로그인 확인 완료 · AI를 호출하지 않았어요.'};
+  }finally{deadline.removeEventListener('abort',abort);client.close();}
+}
+
 export async function translateAccount(config,provider,data,signal,{Connection=CodexConnection}={}) {
   const runtime=accountPaths(config,provider.id);
   if(!fs.existsSync(runtime.cli))throw new Error('ChatGPT 설정에서 계정 연결을 먼저 눌러 주세요.');
   const deadline=AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(240_000)]);
   const prompt=buildPrompt(data,{cli:false,keyed:true,targetLanguage:provider.targetLanguage}),schema=translationSchema(data);let result;
+  const telemetry={model:provider.model,modelResolved:false,fast:provider.fast===true,serviceTier:null,usage:null,cost:null,rerouted:false};
+  const finishTelemetry=()=>({...telemetry,cost:telemetry.modelResolved?estimateCost(telemetry.model,telemetry.usage,telemetry):null});
   {
     const client=new Connection(runtime,{args:codexArguments(provider.fast===true)}),abort=()=>client.close(new Error('번역을 중지했습니다.'));
     deadline.addEventListener('abort',abort,{once:true});
@@ -70,12 +90,18 @@ export async function translateAccount(config,provider,data,signal,{Connection=C
       if(deadline.aborted)throw new Error('번역을 중지했습니다.');
       await client.initialize();
       const auth=await client.request('account/read');if(auth.account?.type!=='chatgpt')throw accountError('codex','subscription');
-      const {thread}=await client.request('thread/start',{cwd:runtime.workspace,ephemeral:true,sandbox:'read-only',approvalPolicy:'never',model:provider.model==='default'?null:provider.model,baseInstructions:`Translate supplied webpage text into clear ${TARGET_LANGUAGES[validateTargetLanguage(provider.targetLanguage)]}. Return only the requested JSON. Do not use tools.`});
+      const started=await client.request('thread/start',{cwd:runtime.workspace,ephemeral:true,sandbox:'read-only',approvalPolicy:'never',model:provider.model==='default'?null:provider.model,baseInstructions:`Translate supplied webpage text into clear ${TARGET_LANGUAGES[validateTargetLanguage(provider.targetLanguage)]}. Return only the requested JSON. Do not use tools.`});
+      const {thread}=started;
+      if(typeof started.model==='string'&&started.model.length<=160){telemetry.model=started.model;telemetry.modelResolved=true;}
+      telemetry.serviceTier=typeof started.serviceTier==='string'?started.serviceTier:null;
       result=await new Promise((resolve,reject)=>{
         let text='';
         const closed=error=>{cleanup();reject(error);};
         const notification=(method,params)=>{
           if(params?.threadId!==thread.id)return;
+          // Total is a cumulative snapshot for this fresh, ephemeral thread. Never sum notifications.
+          if(method==='thread/tokenUsage/updated')telemetry.usage=normalizeUsage(params.tokenUsage?.total);
+          if(method==='model/rerouted'){telemetry.rerouted=true;if(typeof params.toModel==='string'&&params.toModel.length<=160)telemetry.model=params.toModel;}
           if(method==='item/completed'&&params.item?.type==='agentMessage')text=params.item.text;
           if(method==='turn/completed'){
             cleanup();
@@ -86,9 +112,10 @@ export async function translateAccount(config,provider,data,signal,{Connection=C
         client.on('closed',closed);client.on('notification',notification);
         client.request('turn/start',{threadId:thread.id,input:[{type:'text',text:prompt}],effort:'low',outputSchema:schema}).catch(error=>{cleanup();reject(error);});
       });
-    }finally{deadline.removeEventListener('abort',abort);client.close();}
+    }catch(error){error.telemetry=finishTelemetry();throw error;}
+    finally{deadline.removeEventListener('abort',abort);client.close();}
   }
-  if(deadline.aborted)throw new Error('번역을 중지했습니다.');
+  if(deadline.aborted)throw Object.assign(new Error('번역을 중지했습니다.'),{telemetry:finishTelemetry()});
   try{fs.writeFileSync(path.join(runtime.profile,'verified.json'),JSON.stringify({at:Date.now()}));}catch{}
-  return result;
+  return {...result,telemetry:finishTelemetry()};
 }

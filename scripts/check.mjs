@@ -11,7 +11,8 @@ for(const name of sourceFiles){
   if(name.endsWith('.png')) {
     const bytes=fs.readFileSync(path.join(root,name));
     const size=Number(/icon-(\d+)\.png$/.exec(name)?.[1]);
-    if(bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||bytes.readUInt32BE(16)!==size||bytes.readUInt32BE(20)!==size)throw new Error('Invalid icon: '+name);
+    if(bytes.length<24||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||!bytes.readUInt32BE(16)||!bytes.readUInt32BE(20))throw new Error('Invalid PNG: '+name);
+    if(size&&(bytes.readUInt32BE(16)!==size||bytes.readUInt32BE(20)!==size))throw new Error('Invalid icon: '+name);
     continue;
   }
   const text=read(name);

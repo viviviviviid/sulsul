@@ -7,7 +7,7 @@ import { PROVIDERS } from '../../host/provider-settings.mjs';
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-settings-browser-'));
 const ext=path.join(scratch,'extension');fs.cpSync('extension',ext,{recursive:true});
 const manifest=JSON.parse(fs.readFileSync(path.join(ext,'manifest.json'),'utf8'));manifest.host_permissions=['https://reader.test/*'];fs.writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest));
-const catalog={selected:'codex',scope:'initial',targetLanguages:{ko:'Korean',en:'English'},maxConcurrentTranslations:2,providers:JSON.parse(JSON.stringify(PROVIDERS))};
+const catalog={selected:'codex',scope:'initial',connectionCheck:'account-only',targetLanguages:{ko:'Korean',en:'English'},maxConcurrentTranslations:2,providers:JSON.parse(JSON.stringify(PROVIDERS))};
 fs.appendFileSync(path.join(ext,'background.js'),`
 globalThis.qaSettings=${JSON.stringify(catalog)};
 globalThis.qaRequests=[];
@@ -23,7 +23,7 @@ native=async(type,data,tabId,sourceUrl)=>{
   const p=qaSettings.providers[data.provider];p.model=data.model;p.fast=data.fast;p.targetLanguage=data.targetLanguage;
   return structuredClone(qaSettings);
  }
- if(type==='provider-test'){qaTests++;return {message:'연결 성공 · 편하게 읽어요.'};}
+ if(type==='account-check'){qaTests++;return {message:'ChatGPT 로그인 확인 완료 · AI를 호출하지 않았어요.'};}
  if(type==='login'||type==='login-status')return qaLogin();
  if(type==='login-cancel')return {...qaLogin(),state:'canceled',message:'계정 연결을 취소했어요.'};
  if(type==='translate'){
@@ -47,6 +47,9 @@ try{
  await worker.evaluate(()=>{qaLoginState='connected';});await login.locator('#done').waitFor({state:'visible'});
  await worker.evaluate(()=>{qaLoginState='waiting';});await login.reload();await login.locator('#signin').waitFor({state:'visible'});await login.locator('#cancel').click();
  await login.locator('#retry').waitFor({state:'visible'});assert.match(await login.locator('#status').innerText(),/취소/);
+ await worker.evaluate(()=>{delete qaSettings.connectionCheck;});await login.reload();await login.locator('#retry').waitFor({state:'visible'});
+ assert.match(await login.locator('#status').innerText(),/최신 버전/);assert.equal(await login.locator('#signin').isVisible(),false,'old hosts cannot run a sample-translation login check');
+ await worker.evaluate(()=>{qaSettings.connectionCheck='account-only';});
  await login.close();console.log('PASS ChatGPT official login, completion and cancellation');
  await options.goto('chrome-extension://'+extensionId+'/options.html');await waitStatus('ChatGPT 계정을');
  assert.equal(await options.locator('#provider,#api-key,#endpoint').count(),0);
@@ -76,6 +79,7 @@ try{
  }
  await menu('sulsul-start');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('codex 한국어'));
  await page.mouse.move(0,0);await page.waitForTimeout(250);
+ for(let i=0;i<40&&(await command('sulsul-state')).busy;i++)await page.waitForTimeout(50);
  const collapsed=await barState();assert.equal(collapsed.visible,1);assert.ok(collapsed.opacity<1);
  assert.equal(collapsed.status,'번역 완료');assert.equal(collapsed.alertVisible,false);
  await page.locator('[data-sulsul-ui]').hover();await page.waitForTimeout(250);
@@ -178,7 +182,9 @@ try{
  assert.equal(await page.locator('h1').innerText(),'Read this page');assert.equal((await command('sulsul-state')).mode,'paused');
  await command('sulsul-toggle');await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('codex 한국어'));
  assert.equal(await worker.evaluate(()=>qaRequests.at(-1).model),'another-model');
- await options.locator('#test').click();await waitStatus('연결 성공');assert.equal(await worker.evaluate(()=>qaTests),1);
+ const beforeAuthCheck=await worker.evaluate(()=>qaRequests.length);
+ await options.locator('#test').click();await waitStatus('로그인 확인 완료');assert.equal(await worker.evaluate(()=>qaTests),1);
+ assert.equal(await worker.evaluate(()=>qaRequests.length),beforeAuthCheck,'connection button makes no translation request');
  // A restored document must discard translations from the previous model.
  await worker.evaluate(async id=>{const key='reader:'+id;const state=(await chrome.storage.session.get(key))[key];await chrome.storage.session.set({[key]:{...state,mode:'paused'},'provider-revision':crypto.randomUUID()});qaSettings.providers.codex.model='default';qaSettings.scope=crypto.randomUUID();},tabId);
  await page.evaluate(()=>dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
