@@ -1,6 +1,6 @@
 {
   "name": "sulsul",
-  "version": "0.12.3",
+  "version": "0.13.3",
   "description": "Read the web in your preferred language with your ChatGPT account.",
   "license": "MIT",
   "private": true,
@@ -13,7 +13,7 @@
     "check": "node scripts/check.mjs",
     "package": "node scripts/package.mjs",
     "package:source": "node scripts/package.mjs --source",
-    "test:browser": "node tests/browser/general-web.mjs && node tests/browser/auto-navigation.mjs && node tests/browser/settings.mjs && node tests/browser/reading-priority.mjs && node tests/browser/popup.mjs && node tests/browser/history.mjs && node tests/browser/completion.mjs",
+    "test:browser": "node tests/browser/general-web.mjs && node tests/browser/auto-navigation.mjs && node tests/browser/settings.mjs && node tests/browser/reading-priority.mjs && node tests/browser/popup.mjs && node tests/browser/history.mjs && node tests/browser/completion.mjs && node tests/browser/motion.mjs && node tests/browser/single-reader.mjs",
     "package:macos": "node scripts/package-macos.mjs",
     "package:extension": "node scripts/package.mjs --extension"
   },

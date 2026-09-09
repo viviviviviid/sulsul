@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 const source=readFileSync(new URL('../extension/background.js',import.meta.url),'utf8');
 function worker(menus=new Map(), activeTab=null, shortcut='Alt+Shift+S') {
   const callbacks={},injected=[],sent=[];
-  let settingsOpened=0;
+  let settingsOpened=0,readerLive=false;
   const event=name=>({addListener(fn){callbacks[name]=fn;}});
   const context=vm.createContext({URL,console,chrome:{
     runtime:{onMessage:event('message'),onInstalled:event('installed'),onStartup:event('startup'),async openOptionsPage(){settingsOpened++;}},
@@ -15,8 +15,8 @@ function worker(menus=new Map(), activeTab=null, shortcut='Alt+Shift+S') {
       if(item.parentId)assert.ok(menus.has(item.parentId),'parent must be registered first');
       menus.set(item.id,JSON.parse(JSON.stringify(item)));queueMicrotask(done);return item.id;
     }},
-    tabs:{onRemoved:event('removed'),onUpdated:event('updated'),async query(){if(activeTab)return [activeTab];assert.fail('context click must use the clicked tab');},async sendMessage(id,message,options){sent.push({id,type:message.type,frameId:options.frameId});}},
-    scripting:{async executeScript(args){injected.push(JSON.parse(JSON.stringify(args)));}},
+    tabs:{onRemoved:event('removed'),onUpdated:event('updated'),async query(){if(activeTab)return [activeTab];assert.fail('context click must use the clicked tab');},async sendMessage(id,message,options){sent.push({id,type:message.type,frameId:options.frameId});if(message.type==='sulsul-state'&&readerLive)return {mode:'running'};}},
+    scripting:{async executeScript(args){injected.push(JSON.parse(JSON.stringify(args)));readerLive=true;}},
     commands:{onCommand:event('command'),async getAll(){return [{name:'start-reading',shortcut}]}}
   }});
   vm.runInContext(source,context);
@@ -46,7 +46,7 @@ test('the single translation menu targets the clicked webpage main frame',async(
     assert.deepEqual(w.sent.at(-1),{id:0,type,frameId:0});
   }
   assert.equal(w.injected.length,1);
-  assert.deepEqual(w.injected[0],{target:{tabId:0},files:['content.js']});
+  assert.deepEqual(w.injected[0],{target:{tabId:0},files:['motion.js','content.js']});
   await w.callbacks.menu({menuItemId:'sulsul-settings'});
   assert.equal(w.settingsOpened,0);
   for(const item of [{id:7,url:'chrome://extensions/'},{id:8,url:'file:///example.html'},undefined]){
@@ -71,4 +71,11 @@ test('menu shows the actual assignment or an unassigned hint',async()=>{
   const w=worker(new Map(),null,shortcut);await w.callbacks.installed();
   assert.equal(w.menus.get('sulsul-start').title,shortcut ? '술술 번역 ('+shortcut+')' : '술술 번역 (단축키 미설정)');
  }
+});
+
+test('repeated starts reuse a live reader and concurrent installation is shared',async()=>{
+ const w=worker(),tab={id:8,url:'https://example.com/page'};
+ await Promise.all(Array.from({length:8},()=>w.callbacks.menu({menuItemId:'sulsul-start'},tab)));
+ assert.equal(w.injected.length,1,'concurrent clicks share a single script injection');
+ await w.callbacks.menu({menuItemId:'sulsul-start'},tab);assert.equal(w.injected.length,1,'later starts reuse the existing reader');
 });

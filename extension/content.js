@@ -1,5 +1,13 @@
 (() => {
+  if(window.top!==window)return;
   if (globalThis.__sulsul) return;
+  const extensionId=chrome.runtime.id;
+  if(!extensionId)return;
+  // A new isolated context can inherit DOM left by a previous extension instance.
+  document.dispatchEvent(new Event('sulsul-reader-claim'));
+  const lifecycle=new AbortController();
+  let disposed=false,urlTimer,sweepTimer,observer;
+  const motion=globalThis.__sulsulMotion;
   const MAX_CONCURRENT_TRANSLATIONS = 4;
   const UNTRANSLATED_MESSAGE='AI가 이 문단을 번역하지 않고 원문으로 돌려줬어요. 한 번 더 요청했지만 같아 자동 재시도를 멈췄어요.';
   // Mintlify renders prose paragraphs as direct spans, without p elements.
@@ -22,8 +30,27 @@
   let measurements = null;
   const corners = new Set(['top-left','top-right','bottom-left','bottom-right']);
   let toolbarCorner = 'bottom-right', cornerRevision = 0;
+  let toolbarMotion='play',motionRevision=0;
   let cornerWrites = Promise.resolve();
   const shadowObservers = new Map();
+
+  function dispose(){
+    if(disposed)return;
+    const hadWork=busy;
+    disposed=true;token++;control++;mode='off';busy=false;waiting=false;
+    clearTimeout(readyTimer);clearTimeout(scanTimer);clearInterval(urlTimer);clearInterval(sweepTimer);
+    lifecycle.abort();observer?.disconnect();for(const watcher of shadowObservers.values())watcher.disconnect();shadowObservers.clear();
+    try{chrome.runtime.onMessage.removeListener(onMessage);chrome.storage.onChanged.removeListener(onStorageChange);}catch{}
+    toolbar?._cancelDrag();restore();toolbar?.remove();
+    if(globalThis.__sulsul?.dispose===dispose)delete globalThis.__sulsul;
+    if(hadWork)try{chrome.runtime.sendMessage({type:'cancel',url:pageUrl()}).catch(()=>{});}catch{}
+  }
+  function live(){
+    if(disposed)return false;
+    try{if(chrome.runtime.id===extensionId)return true;}catch{}
+    dispose();return false;
+  }
+  function pruneToolbars(){for(const node of document.querySelectorAll('[data-sulsul-ui]'))if(node!==toolbar)node.remove();}
 
   function state() { return { mode, waiting, busy, failed, translated, complete, total: records.length, skipped, message, measurements }; }
   function findRoot() { return document.body; }
@@ -313,8 +340,10 @@
   }
 
   function notify(text = message) {
+    if(!live())return;
     message = text;
     if (mode === 'off') { publish(); return; }
+    pruneToolbars();
     if (!toolbar?.isConnected) {
       toolbar = document.createElement('div');
       toolbar.dataset.sulsulUi = '';
@@ -341,6 +370,8 @@
         :host([data-dragging]) button[data-label]::after{display:none}
         button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
         button.main .brand{width:26px;height:26px;stroke-width:1.8}
+        ${motion.css}
+        :host([data-concealed]) .brand path{animation-play-state:paused}
         button.main .control{display:none}
         section:hover button.main .brand,section:focus-within button.main .brand{display:none}
         section:hover button.main .control,section:focus-within button.main .control{display:block}
@@ -397,7 +428,8 @@
         if(className)svg.setAttribute('class',className);
         svg.innerHTML=markup;return svg;
       };
-      action.append(icon('<path d="M4 9c3-6 5 6 8 0s5 6 8 0M4 15c3-6 5 6 8 0s5 6 8 0"/>','brand'),icon('<g class="pause"><path d="M9 6v12M15 6v12"/></g><g class="play"><path d="m9 5 10 7-10 7Z"/></g><g class="retry"><path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5"/></g>','control'));
+      const brand=motion.create(toolbarMotion);brand.classList.add('brand');
+      action.append(brand,icon('<g class="pause"><path d="M9 6v12M15 6v12"/></g><g class="play"><path d="m9 5 10 7-10 7Z"/></g><g class="retry"><path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5"/></g>','control'));
       original.dataset.label='원문';original.textContent='';original.setAttribute('aria-label','원문 보기');original.append(icon('<path d="M3 5h5c2 0 4 1 4 3v12c0-2-2-3-4-3H3Zm18 0h-5c-2 0-4 1-4 3v12c0-2 2-3 4-3h5Z"/>'));
       end.dataset.label='종료';end.textContent='';end.setAttribute('aria-label','번역 종료');end.append(icon('<path d="m7 7 10 10M17 7 7 17"/>'));
       const closedEye='<path d="M3 8c2 4 5 6 9 6s7-2 9-6M5 11l-2 3M9 14l-1 3M15 14l1 3M19 11l2 3"/>';
@@ -409,7 +441,7 @@
       hide.addEventListener('click',()=>{toolbar.setAttribute('data-concealed','');reveal.focus({preventScroll:true});});
       reveal.addEventListener('click',()=>{toolbar.removeAttribute('data-concealed');action.focus({preventScroll:true});});
       section.append(original,end,hide,settings,action,label); shadow.append(style,alert,section,reveal);
-      toolbar._hide=hide;toolbar._reveal=reveal;
+      toolbar._hide=hide;toolbar._reveal=reveal;toolbar._motion=brand;
       toolbar._label = label; toolbar._original = original; toolbar._action = action; toolbar._end = end;
       toolbar._section=section; toolbar._alert=alert; toolbar._stateText=stateText; toolbar._actionText=actionText;
       enableToolbarDrag(toolbar,section);
@@ -421,6 +453,9 @@
     toolbar._alert.textContent = failed ? message : '';
     toolbar._section.toggleAttribute('data-error',failed);
     toolbar._section.toggleAttribute('data-paused',mode === 'paused');
+    toolbar._section.toggleAttribute('data-translating',mode==='running'&&busy&&!failed);
+    toolbar._motion.dataset.motion=toolbarMotion;
+    toolbar._motion.toggleAttribute('data-active',mode==='running'&&busy&&!failed);
     const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
     toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : skipped ? '일부 문단 확인 필요' : translated ? '번역 완료' : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
@@ -435,6 +470,7 @@
   }
 
   async function send(type, data) {
+    if(!live())throw new Error('페이지를 새로고침하고 술술을 다시 실행해 주세요.');
     const reply = await chrome.runtime.sendMessage({ type, data, url: pageUrl() });
     if (!reply?.ok) throw new Error(reply?.error || '연결을 확인해 주세요.');
     return reply.result;
@@ -525,11 +561,13 @@
     const visible = pending[0].priority < 3;
     const blockLimit = !complete ? 4 : visible ? 8 : 18;
     const charLimit = !complete ? 1800 : visible ? 3200 : 7000;
-    const current = []; let size=0, fragments=0;
+    const current = []; let size=0, fragments=0, allShort=true;
     for (const {record,priority} of pending) {
       const n = record.parts.reduce((v,p) => v+p.source.length,0);
-      if (current.length && (current.length >= blockLimit || size+n > charLimit || fragments+record.parts.length > 1200 || priority!==pending[0].priority)) break;
-      current.push(record); size+=n; fragments+=record.parts.length;
+      const short=n<=100;
+      const limit=allShort&&short?24:blockLimit;
+      if (current.length && (current.length >= limit || size+n > charLimit || fragments+record.parts.length > 1200 || priority!==pending[0].priority)) break;
+      current.push(record); size+=n; fragments+=record.parts.length; allShort=allShort&&short;
     }
     return current;
   }
@@ -629,15 +667,20 @@
   }
 
   function requestScan() {
+    if(!live())return;
     if (mode !== 'running' || failed) return;
     dirty = true;
     if (busy || waiting || scanTimer !== undefined) return;
     scanTimer = setTimeout(() => { scanTimer = undefined; if (mode === 'running' && !busy && !waiting && !failed) start(); }, 500);
   }
 
-  function startReading() { return mode === 'running' && !failed ? Promise.resolve() : changeMode('running'); }
+  function startReading() {
+    if(mode==='running'&&!failed){toolbar?.removeAttribute('data-concealed');notify();return Promise.resolve();}
+    return changeMode('running');
+  }
   function toggle() { return changeMode(failed || mode !== 'running' ? 'running' : 'paused'); }
-  chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  function onMessage(msg, sender, reply) {
+    if(!live())return;
     if (sender.id !== chrome.runtime.id) return;
     if (msg.type === 'sulsul-state') { reply(state()); return; }
     if (msg.type === 'sulsul-provider-changed') {
@@ -648,9 +691,11 @@
     if (msg.type === 'sulsul-navigate') { navigate(); reply(state()); return; }
     const action = { 'sulsul-start': startReading, 'sulsul-toggle': toggle, 'sulsul-restore': showOriginal, 'sulsul-stop': stop, 'sulsul-end': finish }[msg.type];
     if (action) { action().then(() => reply(state())); return true; }
-  });
+  }
+  chrome.runtime.onMessage.addListener(onMessage);
   // Documentation sites navigate without a page reload. Never write a late response onto a new page.
   function navigate() {
+    if(!live())return;
     if (currentUrl !== pageUrl()) {
       const stillOld = records.length && records.every(r => unchanged(r, r.applied ? 'translated' : 'original'));
       interrupt();
@@ -663,8 +708,10 @@
     }
   }
   function onMutations(changes) {
+    if(!live())return;
     navigate();
     if (mode === 'off') return;
+    pruneToolbars();
     const contentChanged = changes.some(m => {
       const target = m.target.nodeType === Node.ELEMENT_NODE ? m.target : m.target.parentElement;
       if (target?.closest(EXCLUDE)) return false;
@@ -681,17 +728,18 @@
     if (mode !== 'off' && !toolbar?.isConnected) notify();
   }
   const observationOptions = { childList:true, characterData:true, subtree:true, attributes:true, attributeFilter:['hidden','aria-hidden','class','style','open','slot'] };
-  const observer = new MutationObserver(onMutations);
+  observer = new MutationObserver(onMutations);
   observer.observe(document.documentElement, observationOptions);
   // pushState does not fire popstate, and may precede the new document's DOM update.
-  setInterval(() => { if (mode !== 'off') navigate(); }, 300);
+  urlTimer=setInterval(() => { if (mode !== 'off') navigate(); }, 300);
   // attachShadow itself emits no document mutation; a slow sweep also finds late components.
-  setInterval(requestScan, 3000);
-  window.addEventListener('scroll', requestScan, { passive:true, capture:true });
-  window.addEventListener('resize', () => { toolbar?._cancelDrag(); requestScan(); }, { passive:true });
-  window.addEventListener('popstate', navigate);
-  window.addEventListener('pagehide', () => { toolbar?._cancelDrag(); control++; interrupt(); });
+  sweepTimer=setInterval(requestScan, 3000);
+  window.addEventListener('scroll', requestScan, { passive:true, capture:true,signal:lifecycle.signal });
+  window.addEventListener('resize', () => { toolbar?._cancelDrag(); requestScan(); }, { passive:true,signal:lifecycle.signal });
+  window.addEventListener('popstate', navigate,{signal:lifecycle.signal});
+  window.addEventListener('pagehide', () => { toolbar?._cancelDrag(); control++; interrupt(); },{signal:lifecycle.signal});
   async function synchronize() {
+    if(!live())return;
     const revision = control;
     try {
       const session = await send('reader-get');
@@ -704,8 +752,13 @@
       else { restore(); toolbar?.remove(); message = ''; publish(); }
     } catch {} // An unstarted reader stays silent when the extension is reloaded.
   }
-  window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); });
-  globalThis.__sulsul = { state };
+  window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); },{signal:lifecycle.signal});
+  document.addEventListener('sulsul-reader-claim',dispose,{signal:lifecycle.signal});
+  globalThis.__sulsul = { state,dispose };
+  const initialMotionRevision=motionRevision;
+  chrome.storage.local.get('toolbar-motion').then(data=>{if(motionRevision===initialMotionRevision){toolbarMotion=motion.normalize(data['toolbar-motion']);if(toolbar)toolbar._motion.dataset.motion=toolbarMotion;}}).catch(()=>{});
+  function onStorageChange(changes,area){if(!live())return;if(area==='local'&&changes['toolbar-motion']){motionRevision++;toolbarMotion=motion.normalize(changes['toolbar-motion'].newValue);if(toolbar)toolbar._motion.dataset.motion=toolbarMotion;}}
+  chrome.storage.onChanged.addListener(onStorageChange);
   const initialCornerRevision = cornerRevision;
   chrome.storage.local.get('toolbar-corner').then(saved => {
     if (cornerRevision === initialCornerRevision) dockToolbar(saved['toolbar-corner']);

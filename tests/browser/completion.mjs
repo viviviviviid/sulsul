@@ -21,7 +21,7 @@ try{
  const command=type=>worker.evaluate(({tabId,type})=>chrome.tabs.sendMessage(tabId,{type}),{tabId,type});
  const count=()=>worker.evaluate(()=>qaCalls.length);
  async function until(fn,label){const end=Date.now()+12000;while(Date.now()<end){if(await fn())return;await page.waitForTimeout(50);}throw new Error(label);}
- async function start(url){await page.goto(url);tabId=await worker.evaluate(async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id,url);await worker.evaluate(tabId=>chrome.scripting.executeScript({target:{tabId},files:['content.js']}),tabId);await command('sulsul-start');}
+ async function start(url){await page.goto(url);tabId=await worker.evaluate(async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id,url);await worker.evaluate(tabId=>chrome.scripting.executeScript({target:{tabId},files:['motion.js','content.js']}),tabId);await command('sulsul-start');}
  await start('https://completion.test/late');
  await until(async()=>{const s=await command('sulsul-state');return s.translated&&!s.busy&&!s.waiting;},'completion');
  assert.match(await page.locator('#late').innerText(),/^번역:/,'completion scan includes CSSOM-revealed reply before done');

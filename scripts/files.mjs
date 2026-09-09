@@ -1,5 +1,6 @@
 // Explicit publication allowlist. Installed credentials and generated files never enter a release.
 export const runtimeFiles = [
+  'extension/motion.js','extension/motion-settings.js',
   'extension/history-charts.js',
   'host/usage.mjs','host/history.mjs','extension/history.html','extension/history.css','extension/history.js',
   'docs/images/reading-translated.png','docs/images/reading-original.png','docs/images/popup.png',
@@ -13,6 +14,7 @@ export const runtimeFiles = [
   'host/core.mjs','host/runner.mjs','host/host.mjs','host/Launcher.cs','host/setup-runtime.mjs','host/translation.schema.json','host/provider-settings.mjs','host/providers.mjs'
 ];
 export const sourceFiles = [...runtimeFiles,
+  'tests/browser/motion.mjs','tests/browser/single-reader.mjs',
   'tests/browser/completion.mjs',
   'tests/history-charts.test.mjs',
   'tests/history.test.mjs','tests/browser/history.mjs',

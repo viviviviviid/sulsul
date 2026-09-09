@@ -59,19 +59,21 @@ async function settled(){await until(async()=>{const s=await state();return s.tr
 try {
  await page.goto('https://feed.test/home',{waitUntil:'load'});
  tabId=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://feed.test/home').id);
- await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),tabId);
  await worker.evaluate(()=>qaHold=true);
  await command('sulsul-toggle');
- await until(async()=>await count()===3,'three prose requests; navigation waits');
- assert.equal(await worker.evaluate(()=>qaHeld.size),3);
- await worker.evaluate(()=>[...qaHeld.values()][2].resolve());
- await until(async()=> (await state()).complete>0,'third batch applies before first');
+ await until(async()=>await count()===2,'short prose shares two requests; navigation waits');
  assert.equal(await worker.evaluate(()=>qaHeld.size),2);
- assert.equal(await worker.evaluate(()=>qaMaxActive),3);
+ await worker.evaluate(()=>[...qaHeld.values()][1].resolve());
+ await until(async()=> (await state()).complete>0,'second batch applies before first');
+ assert.equal(await worker.evaluate(()=>qaHeld.size),1);
+ assert.equal(await worker.evaluate(()=>qaMaxActive),2);
  const early=(await state()).measurements;
  assert.ok(early.firstTextMs>=0);assert.equal(early.totalMs,null);
- const firstBatches=await worker.evaluate(()=>qaCalls.slice(0,3).map(c=>c.data.blocks.map(b=>b.id)));
- assert.ok(firstBatches.every(ids=>ids.length<=4));
+ const firstBatches=await worker.evaluate(()=>qaCalls.slice(0,2).map(c=>c.data.blocks.map(b=>b.id)));
+ assert.ok(firstBatches.every(ids=>ids.length<=24));
+ const larger=await worker.evaluate(()=>qaCalls.slice(0,2).filter(c=>c.data.blocks.length>4).flatMap(c=>c.data.blocks));
+ assert.ok(larger.length>0);assert.ok(larger.every(b=>b.parts.reduce((n,p)=>n+p.text.length,0)<=100),'larger batches contain only short items');
  assert.equal(new Set(firstBatches.flat()).size,firstBatches.flat().length,'parallel batches never repeat a block');
  console.log('PASS bounded prose-first parallel batches, out-of-order display and first-text timing');
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p id="during-request">Comment arriving while the first translation is running.</p>'));
@@ -180,7 +182,7 @@ try {
  console.log('PASS oversized paragraph marker, details, deduplication and cleanup');
  await worker.evaluate(()=>qaMalformed=true);
  await page.goto('https://feed.test/errors',{waitUntil:'load'});
- await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),tabId);
  await command('sulsul-toggle');
  await until(async()=> (await state()).message.includes('수가 맞지'),'format failure');
  const errors=await count();await page.waitForTimeout(3500);assert.equal(await count(),errors,'no automatic error retry loop');

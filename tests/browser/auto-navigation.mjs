@@ -45,7 +45,7 @@ async function done(){await until(async()=>{const s=await state();return s.trans
 try {
   await page.goto('https://reader.test/first',{waitUntil:'load'});
   tabId=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://reader.test/first').id);
-  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
+  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),tabId);
   assert.equal((await state()).mode,'off');
   assert.equal(await count(),0);
   await command('sulsul-toggle');await done();
@@ -106,7 +106,7 @@ try {
   assert.equal(await count(),endedCount);
   console.log('PASS exit restores originals, closes toolbar, and disables the next page');
 
-  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
+  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),tabId);
   await worker.evaluate(()=>qaHold=true);
   await command('sulsul-toggle');await until(async()=> (await state()).busy,'pending translation');
   await until(async()=> await count()>endedCount,'native pending');

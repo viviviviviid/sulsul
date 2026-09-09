@@ -14,7 +14,7 @@ function render(){
  $('reading-status').hidden=!connected||!available||!$('progress').textContent;
  $('reading-status').dataset.tone=reader.failed?'error':reader.skipped?'warning':reader.mode==='running'&&!reader.busy&&!reader.waiting?'success':'neutral';
 }
-async function act(type){if(!available||working)return;working=true;render();try{reader=await chrome.tabs.sendMessage(tabId,{type});}catch{reader.failed=true;reader.message='페이지를 새로고침하고 다시 실행해 주세요.';}finally{working=false;render();}}
+async function act(type){if(!available||working)return;working=true;render();try{reader=await chrome.tabs.sendMessage(tabId,{type},{frameId:0});}catch{reader.failed=true;reader.message='페이지를 새로고침하고 다시 실행해 주세요.';}finally{working=false;render();}}
 async function loadConnection(){
  try{const status=await rpc('health');connection=status.provider!=='codex'?'install':status.loginCached?'ready':'login';}
  catch{connection='install';}
@@ -44,7 +44,7 @@ $('shortcut').addEventListener('click',()=>chrome.tabs.create({url:'chrome://ext
 chrome.runtime.onMessage.addListener((msg,sender)=>{if(msg.type==='sulsul-state'&&sender.tab?.id===tabId){reader=msg.state;render();}});
 async function init(){
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});$('page-title').textContent=tab?.title||'웹페이지를 열어 주세요';
- if(Number.isInteger(tab?.id)&&/^https?:/.test(tab.url||'')){tabId=tab.id;try{await chrome.scripting.executeScript({target:{tabId},files:['content.js']});reader=await chrome.tabs.sendMessage(tabId,{type:'sulsul-state'});available=true;}catch{}}
+ if(Number.isInteger(tab?.id)&&/^https?:/.test(tab.url||'')){tabId=tab.id;try{try{reader=await chrome.tabs.sendMessage(tabId,{type:'sulsul-state'},{frameId:0});}catch{await chrome.scripting.executeScript({target:{tabId},files:['motion.js','content.js']});reader=await chrome.tabs.sendMessage(tabId,{type:'sulsul-state'},{frameId:0});}available=true;}catch{}}
  render();await loadConnection();
 }
 init().catch(()=>{$('reading-status').hidden=false;$('reading-status').dataset.tone='error';$('progress').textContent='팝업을 닫고 다시 열어 주세요.';});

@@ -39,7 +39,7 @@ const worker=context.serviceWorkers()[0]||await context.waitForEvent('servicewor
 try {
  const page=await context.newPage();await page.goto('https://feed.test/docs');
  const id=await worker.evaluate(async()=> (await chrome.tabs.query({})).find(t=>t.url==='https://feed.test/docs').id);
- await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),id);
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),id);
  await worker.evaluate(()=>qaHold=true);
  await worker.evaluate(id=>chrome.tabs.sendMessage(id,{type:'sulsul-toggle'}),id);
  await page.waitForTimeout(3000);
@@ -49,5 +49,10 @@ try {
  await worker.evaluate(()=>{qaHold=false;qaRelease();});
  await page.waitForFunction(()=>document.querySelector('nav a').textContent.startsWith('번역: '),null,{timeout:15000});
  assert.ok((await page.locator('#body p').first().innerText()).startsWith('번역: '));
+ await page.waitForFunction(()=>[...document.querySelectorAll('nav a')].every(a=>a.textContent.startsWith('번역: ')),null,{timeout:15000});
+ const navigationBatches=await worker.evaluate(()=>qaCalls.map(c=>c.data.blocks.filter(b=>b.cacheKind==='navigation').length).filter(Boolean));
+ assert.ok(Math.max(...navigationBatches)>8,'short navigation labels share larger requests');
+ assert.ok(navigationBatches.every(n=>n<=24),'all requests respect the host block limit');
+ assert.equal(navigationBatches.reduce((a,b)=>a+b,0),40,'every navigation label is submitted once');
  console.log('PASS inferred main content before large navigation; menu eventually translated');
 } finally {await context.close();}

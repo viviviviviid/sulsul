@@ -61,8 +61,8 @@ async function restoreReader(tabId) {
   const tab = await chrome.tabs.get(tabId);
   if (originOf(tab.url) !== session.origin) { await writeReader(tabId, null); return; }
   // activeTab permits subsequent pages on this origin; no permanent site permission is needed.
-  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-  await chrome.tabs.sendMessage(tabId, { type: 'sulsul-navigate' });
+  await ensureReader(tab);
+  await chrome.tabs.sendMessage(tabId, { type: 'sulsul-navigate' },{frameId:0});
 }
 
 function connect() {
@@ -289,7 +289,7 @@ async function saveProvider(data) {
     if (extraIds.length) await native('cancel',{ids:extraIds});
     await cancelTranslations(jobs);
     await Promise.all(tasks.map(p => p.done));
-    await Promise.all(tabIds.map(id => chrome.tabs.sendMessage(id,{type:'sulsul-provider-changed',providerRevision}).catch(() => {})));
+    await Promise.all(tabIds.map(id => chrome.tabs.sendMessage(id,{type:'sulsul-provider-changed',providerRevision},{frameId:0}).catch(() => {})));
     // The next provider may have a lower limit. Negotiate before widening again.
     translationLimit = 1;
     return await native('settings-save',data);
@@ -307,12 +307,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   const tabId = sender.tab?.id;
   // Chrome may keep sender.url at the initial document URL after pushState.
   const sourceUrl = message.url || sender.url;
-  const documentMessage = tabId !== undefined && originOf(sourceUrl) && originOf(sourceUrl) === originOf(sender.url);
+  const documentMessage = tabId !== undefined && (sender.frameId===undefined||sender.frameId===0) && originOf(sourceUrl) && originOf(sourceUrl) === originOf(sender.url);
   let task;
   if (message.type === 'translate' && documentMessage) task = translate(message.data, tabId, sourceUrl);
   else if (message.type === 'reader-get' && documentMessage) task = readReader(tabId, sourceUrl);
   else if (message.type === 'reader-set' && documentMessage) task = setReader(tabId, sourceUrl, message.data?.mode);
-  else if (message.type === 'cancel' && tabId !== undefined) task = cancelTab(tabId);
+  else if (message.type === 'cancel' && tabId !== undefined && (sender.frameId===undefined||sender.frameId===0)) task = cancelTab(tabId);
   else if (message.type === 'open-settings' && (documentMessage || extensionPage)) task = chrome.runtime.openOptionsPage();
   else if (message.type === 'health' && extensionPage) task = native('health');
   else if (message.type === 'login' && extensionPage) task = native('login');
@@ -340,9 +340,20 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
     canceled.catch(() => {}).then(() => restoreReader(tabId)).catch(() => {});
   }
 });
+const readerAttachments=new Map();
+async function ensureReader(tab){
+  const key=tab.id+':'+tab.url;
+  if(readerAttachments.has(key))return readerAttachments.get(key);
+  const task=(async()=>{
+    try{const state=await chrome.tabs.sendMessage(tab.id,{type:'sulsul-state'},{frameId:0});if(state&&['off','running','paused'].includes(state.mode))return;}catch{}
+    await chrome.scripting.executeScript({target:{tabId:tab.id},files:['motion.js','content.js']});
+  })();
+  readerAttachments.set(key,task);
+  try{await task;}finally{if(readerAttachments.get(key)===task)readerAttachments.delete(key);}
+}
 async function runReaderAction(tab, type) {
   if (!Number.isInteger(tab?.id) || !originOf(tab.url)) return;
-  await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+  await ensureReader(tab);
   return chrome.tabs.sendMessage(tab.id, { type }, { frameId: 0 });
 }
 
