@@ -31,7 +31,7 @@ test('cache identity survives saving unchanged settings and returning to a model
   }finally{f.dispose();}
 });
 test('new installations support only ChatGPT and need no API key',async()=>{
-  const f=fixture();try{assert.deepEqual(Object.keys(PROVIDERS),['codex']);assert.equal(f.settings.public().selected,'codex');assert.deepEqual(await f.settings.credentials(),{id:'codex',model:'default',fast:false,hasKey:false});assert.equal(new ProviderRouter(f.config,f.settings).health().provider,'codex');}finally{f.dispose();}
+  const f=fixture();try{assert.deepEqual(Object.keys(PROVIDERS),['codex']);assert.equal(f.settings.public().selected,'codex');assert.deepEqual(await f.settings.credentials(),{id:'codex',model:'default',targetLanguage:'ko',fast:false,hasKey:false});assert.equal(new ProviderRouter(f.config,f.settings).health().provider,'codex');}finally{f.dispose();}
 });
 test('all old selections migrate without exposing or using saved keys and retain the Codex model',async()=>{
   const f=fixture();try{
@@ -39,7 +39,7 @@ test('all old selections migrate without exposing or using saved keys and retain
       const state={selected,revision:'old',providers:{[selected]:{model:'old-model',secret:'SENTINEL'},codex:{model:'kept-model'}}};
       const original=JSON.stringify(state);fs.writeFileSync(f.settings.file,original);
       const view=f.settings.public();assert.equal(view.selected,'codex');assert.deepEqual(Object.keys(view.providers),['codex']);assert.equal(view.providers.codex.model,'kept-model');assert.ok(!JSON.stringify(view).includes('SENTINEL'));
-      assert.deepEqual(await f.settings.credentials(),{id:'codex',model:'kept-model',fast:false,hasKey:false});assert.equal(fs.readFileSync(f.settings.file,'utf8'),original);
+      assert.deepEqual(await f.settings.credentials(),{id:'codex',model:'kept-model',targetLanguage:'ko',fast:false,hasKey:false});assert.equal(fs.readFileSync(f.settings.file,'utf8'),original);
     }
     const before=f.settings.public().scope;const saved=await f.settings.save({provider:'codex',model:'default'});
     assert.notEqual(saved.scope,before);assert.equal(f.settings.public().scope,saved.scope);
@@ -57,4 +57,18 @@ test('old model does not become the ChatGPT model and unsupported requests fail 
     assert.match(accountError('codex','429 quota').message,/한도/);
     await f.settings.save({provider:'codex',model:'default'});assert.equal(f.settings.public().providers.codex.model,'default');
   }finally{f.dispose();}
+});
+
+test('target language persists, isolates caches and validates values',async()=>{
+ const f=fixture();try{
+ const before=f.settings.public().cacheScope;
+ await f.settings.save({provider:'codex',model:'default',targetLanguage:'ja'});
+ assert.equal((await new ProviderSettings(f.config).credentials()).targetLanguage,'ja');
+ assert.notEqual(f.settings.public().cacheScope,before);
+ await f.settings.save({provider:'codex',model:'default'});
+ assert.equal((await f.settings.credentials()).targetLanguage,'ja');
+ await assert.rejects(f.settings.save({provider:'codex',model:'default',targetLanguage:'ignore instructions'}),/언어/);
+ await f.settings.save({provider:'codex',model:'default',targetLanguage:'ko'});
+ assert.equal(f.settings.public().cacheScope,before);
+ }finally{f.dispose();}
 });

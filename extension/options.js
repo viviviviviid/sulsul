@@ -5,6 +5,8 @@ async function rpc(type,data){const reply=await chrome.runtime.sendMessage({type
 function render(){
   if(saved.selected!=='codex'||!saved.providers?.codex)throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');
   $('model').value=saved.providers.codex.model;
+  $('target-language').value=saved.providers.codex.targetLanguage||'ko';
+  $('target-language').disabled=!saved.targetLanguages;
   $('fast').checked=saved.providers.codex.fast===true;
   $('model-choice').value=Array.from($('model-choice').options).some(o=>o.value!=='custom'&&o.value===$('model').value)?$('model').value:'custom';
   $('custom-model').hidden=$('model-choice').value!=='custom';
@@ -12,7 +14,8 @@ function render(){
 }
 async function action(fn){if(busy)return;busy=true;$('fields').disabled=true;
   try{await fn();}catch(error){status(error.message,true);}finally{busy=false;$('fields').disabled=!saved;}}
-$('model').addEventListener('input',()=>{dirty=true;$('test').disabled=true;$('login').disabled=true;status('모델을 저장한 뒤 연결을 확인해 주세요.');});
+$('model').addEventListener('input',()=>{dirty=true;$('test').disabled=true;$('login').disabled=true;status('설정을 저장한 뒤 연결을 확인해 주세요.');});
+$('target-language').addEventListener('change',()=>$('model').dispatchEvent(new Event('input')));
 $('fast').addEventListener('change',()=>$('model').dispatchEvent(new Event('input')));
 $('model-choice').addEventListener('change',()=>{
   const custom=$('model-choice').value==='custom';$('custom-model').hidden=!custom;
@@ -21,8 +24,8 @@ $('model-choice').addEventListener('change',()=>{
   if(custom)$('model').focus();
 });
 $('settings').addEventListener('submit',event=>{event.preventDefault();action(async()=>{
-  status('번역을 일시중지하고 모델을 저장하고 있어요.');
-  saved=await rpc('settings-save',{provider:'codex',model:$('model').value,fast:$('fast').checked});dirty=false;render();status('저장했어요. 페이지에서 이어 읽기를 눌러 주세요.');
+  status('번역을 일시중지하고 설정을 저장하고 있어요.');
+  saved=await rpc('settings-save',{provider:'codex',model:$('model').value,fast:$('fast').checked,targetLanguage:$('target-language').value});dirty=false;render();status('저장했어요. 페이지에서 이어 읽기를 눌러 주세요.');
 });});
 $('test').addEventListener('click',()=>action(async()=>{status('짧은 예문으로 ChatGPT 연결을 확인하고 있어요.');status((await rpc('provider-test')).message);}));
 $('login').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('login.html')}));

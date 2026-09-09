@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "술술 — 웹을 편하게",
-  "description": "ChatGPT로 웹페이지를 읽던 자리에서 자연스럽고 쉬운 한국어로 읽으세요.",
-  "version": "0.9.2",
+  "description": "ChatGPT로 웹페이지를 읽던 자리에서 원하는 언어로 자연스럽게 읽으세요.",
+  "version": "0.10.2",
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true

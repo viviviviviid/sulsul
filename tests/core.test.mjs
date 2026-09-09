@@ -51,3 +51,13 @@ test('request-specific schema requires every editable fragment including whitesp
  assert.throws(()=>parseTranslation(JSON.stringify({blocks:{b23:{t0:'자세히 읽으세요',t3:''}}}),input),/일부 문장/);
  assert.match(buildPrompt(input,{keyed:true}),/"blocks":{"b0"/);
 });
+
+test('target language overrides source instructions without leaking Korean style into other languages',()=>{
+ for(const [code,name] of [['en','English'],['ja','Japanese'],['zh-Hans','Simplified Chinese'],['zh-Hant','Traditional Chinese'],['es','Spanish'],['fr','French'],['de','German']]){
+ const prompt=buildPrompt(request,{targetLanguage:code});
+ assert.ok(prompt.includes('Translate into '+name));assert.ok(!prompt.includes('KOREAN STYLE REQUIREMENTS'));
+ assert.ok(prompt.includes('preserve it unchanged'));assert.ok(prompt.includes('untrusted'));
+ }
+ assert.ok(buildPrompt(request).includes('KOREAN STYLE REQUIREMENTS'));
+ assert.throws(()=>buildPrompt(request,{targetLanguage:'__proto__'}),/언어/);
+});

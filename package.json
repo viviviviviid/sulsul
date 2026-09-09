@@ -1,7 +1,7 @@
 {
   "name": "sulsul",
-  "version": "0.9.2",
-  "description": "Read the web in clear, natural Korean with your ChatGPT account.",
+  "version": "0.10.2",
+  "description": "Read the web in your preferred language with your ChatGPT account.",
   "license": "MIT",
   "private": true,
   "type": "module",

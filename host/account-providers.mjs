@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {EventEmitter} from 'node:events';
-import {buildPrompt,parseTranslation,translationSchema} from './core.mjs';
+import {buildPrompt,parseTranslation,translationSchema,TARGET_LANGUAGES,validateTargetLanguage} from './core.mjs';
 import {accountPaths,accountEnvironment} from './account-runtime.mjs';
 
 export function accountError(id,text='') {
@@ -51,7 +51,7 @@ export class CodexConnection extends EventEmitter {
       this.child.stdin.write(JSON.stringify({id,method,params})+'\n');
     });
   }
-  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.9.2'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
+  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.10.2'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
   close(error=accountError('codex')) {
     if(this.closed)return;this.closed=true;
     for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(error);}this.pending.clear();
@@ -62,7 +62,7 @@ export async function translateAccount(config,provider,data,signal,{Connection=C
   const runtime=accountPaths(config,provider.id);
   if(!fs.existsSync(runtime.cli))throw new Error('ChatGPT 설정에서 계정 연결을 먼저 눌러 주세요.');
   const deadline=AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(240_000)]);
-  const prompt=buildPrompt(data,{cli:false,keyed:true}),schema=translationSchema(data);let result;
+  const prompt=buildPrompt(data,{cli:false,keyed:true,targetLanguage:provider.targetLanguage}),schema=translationSchema(data);let result;
   {
     const client=new Connection(runtime,{args:codexArguments(provider.fast===true)}),abort=()=>client.close(new Error('번역을 중지했습니다.'));
     deadline.addEventListener('abort',abort,{once:true});
@@ -70,7 +70,7 @@ export async function translateAccount(config,provider,data,signal,{Connection=C
       if(deadline.aborted)throw new Error('번역을 중지했습니다.');
       await client.initialize();
       const auth=await client.request('account/read');if(auth.account?.type!=='chatgpt')throw accountError('codex','subscription');
-      const {thread}=await client.request('thread/start',{cwd:runtime.workspace,ephemeral:true,sandbox:'read-only',approvalPolicy:'never',model:provider.model==='default'?null:provider.model,baseInstructions:'Translate supplied webpage text into clear Korean. Return only the requested JSON. Do not use tools.'});
+      const {thread}=await client.request('thread/start',{cwd:runtime.workspace,ephemeral:true,sandbox:'read-only',approvalPolicy:'never',model:provider.model==='default'?null:provider.model,baseInstructions:`Translate supplied webpage text into clear ${TARGET_LANGUAGES[validateTargetLanguage(provider.targetLanguage)]}. Return only the requested JSON. Do not use tools.`});
       result=await new Promise((resolve,reject)=>{
         let text='';
         const closed=error=>{cleanup();reject(error);};

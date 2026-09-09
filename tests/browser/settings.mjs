@@ -7,7 +7,7 @@ import { PROVIDERS } from '../../host/provider-settings.mjs';
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-settings-browser-'));
 const ext=path.join(scratch,'extension');fs.cpSync('extension',ext,{recursive:true});
 const manifest=JSON.parse(fs.readFileSync(path.join(ext,'manifest.json'),'utf8'));manifest.host_permissions=['https://reader.test/*'];fs.writeFileSync(path.join(ext,'manifest.json'),JSON.stringify(manifest));
-const catalog={selected:'codex',scope:'initial',maxConcurrentTranslations:2,providers:JSON.parse(JSON.stringify(PROVIDERS))};
+const catalog={selected:'codex',scope:'initial',targetLanguages:{ko:'Korean',en:'English'},maxConcurrentTranslations:2,providers:JSON.parse(JSON.stringify(PROVIDERS))};
 fs.appendFileSync(path.join(ext,'background.js'),`
 globalThis.qaSettings=${JSON.stringify(catalog)};
 globalThis.qaRequests=[];
@@ -20,7 +20,7 @@ native=async(type,data,tabId,sourceUrl)=>{
  if(type==='settings-get')return structuredClone(qaSettings);
  if(type==='settings-save'){
   qaSettings.selected=data.provider;qaSettings.scope=crypto.randomUUID();
-  const p=qaSettings.providers[data.provider];p.model=data.model;p.fast=data.fast;
+  const p=qaSettings.providers[data.provider];p.model=data.model;p.fast=data.fast;p.targetLanguage=data.targetLanguage;
   return structuredClone(qaSettings);
  }
  if(type==='provider-test'){qaTests++;return {message:'연결 성공 · 편하게 읽어요.'};}
@@ -56,7 +56,7 @@ try{
  const command=type=>worker.evaluate(({id,type})=>chrome.tabs.sendMessage(id,{type}),{id:tabId,type});
  const barState=()=>worker.evaluate(async id=>(await chrome.scripting.executeScript({target:{tabId:id},func:()=>{
   const bar=document.querySelector('[data-sulsul-ui]');
-  const buttons=[bar._original,bar._end,bar._action];
+  const buttons=[bar._original,bar._end,bar._hide,bar._action];
   const rect=bar._action.getBoundingClientRect();
   const box=bar.getBoundingClientRect(), alertBox=bar._alert.getBoundingClientRect();
   return {visible:buttons.filter(b=>getComputedStyle(b).visibility!=='hidden'&&b.getBoundingClientRect().width>0).length,
@@ -79,20 +79,29 @@ try{
  const collapsed=await barState();assert.equal(collapsed.visible,1);assert.ok(collapsed.opacity<1);
  assert.equal(collapsed.status,'번역 완료');assert.equal(collapsed.alertVisible,false);
  await page.locator('[data-sulsul-ui]').hover();await page.waitForTimeout(250);
- const expanded=await barState();assert.equal(expanded.visible,3);assert.equal(expanded.opacity,1);assert.ok(expanded.width>collapsed.width);
+ const expanded=await barState();assert.equal(expanded.visible,4);assert.equal(expanded.opacity,1);assert.equal(expanded.width,56);assert.equal(collapsed.width,56);
  await page.screenshot({path:path.join(scratch,'toolbar-expanded.png')});
  await page.mouse.move(0,0);await page.waitForTimeout(250);assert.equal((await barState()).visible,1);
  await page.screenshot({path:path.join(scratch,'toolbar-collapsed.png')});
  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('[data-sulsul-ui]')._action.focus()}),tabId);
- await page.waitForTimeout(250);assert.equal((await barState()).visible,3,'keyboard focus reveals controls');
+ await page.waitForTimeout(250);assert.equal((await barState()).visible,4,'keyboard focus reveals controls');
  await page.mouse.click(10,10);
- console.log('PASS compact status, hover expansion, full opacity and keyboard access');
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('[data-sulsul-ui]')._hide.click()}),tabId);
+ await page.waitForTimeout(250);assert.equal((await barState()).visible,0);
+ assert.equal((await command('sulsul-state')).mode,'running','hiding keeps translation running');
+ const revealPoint=await worker.evaluate(async id=>(await chrome.scripting.executeScript({target:{tabId:id},func:()=>{const b=document.querySelector('[data-sulsul-ui]')._reveal.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};}}))[0].result,tabId);
+ await page.mouse.click(revealPoint.x,revealPoint.y);await page.waitForTimeout(250);
+ assert.equal((await barState()).visible,4,'edge control restores all buttons');
+ await page.mouse.click(10,10);
+ console.log('PASS compact controls, keyboard access, hide without stopping and restore');
  const dragTo=async(x,y)=>{
   let p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.waitForTimeout(250);
   p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.mouse.down();
   await page.mouse.move(x,y,{steps:12});
   assert.equal((await barState()).dragging,true,'toolbar follows pointer before release');
-  await page.mouse.up();await page.mouse.click(640,350);await page.waitForTimeout(250);
+  await page.mouse.up();
+  assert.ok(await worker.evaluate(async id=>(await chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('[data-sulsul-ui]').getAnimations().some(a=>a.playState==='running')}))[0].result,tabId),'drop animates toward corner');
+  await page.mouse.click(640,350);await page.waitForTimeout(500);
  };
  const assertCorner=async corner=>{
   const s=await barState(),{width,height}=page.viewportSize();assert.equal(s.corner,corner);assert.equal(s.dragging,false);
@@ -107,7 +116,7 @@ try{
  await dragTo(580,320);await assertCorner('top-left'); // Drop near the middle still snaps to a corner.
  // Escape cancels a move without changing the saved corner or activating a button.
  let p=(await barState()).main;await page.mouse.move(p.x,p.y);await page.waitForTimeout(250);p=(await barState()).main;
- await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(900,500,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();
+ await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(900,500,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();await page.waitForTimeout(500);
  await assertCorner('top-left');
  await page.reload();await page.waitForFunction(()=>document.querySelector('h1').textContent.startsWith('codex 한국어'));
  await assertCorner('top-left');
@@ -155,11 +164,14 @@ try{
  console.log('PASS single direct translation menu, removed submenu, reader actions and error retry');
  await options.locator('#model-choice').selectOption('gpt-5.6-luna');
  await options.locator('#fast').check();
+ await options.locator('#target-language').selectOption('en');
  await options.locator('#save').click();await waitStatus('저장했어요');
  assert.equal(await worker.evaluate(()=>qaSettings.providers.codex.model),'gpt-5.6-luna');
  await options.reload();await waitStatus('ChatGPT 계정을');
  assert.equal(await options.locator('#model-choice').inputValue(),'gpt-5.6-luna');
  assert.equal(await options.locator('#fast').isChecked(),true);
+ assert.equal(await options.locator('#target-language').inputValue(),'en');
+ assert.equal(await worker.evaluate(()=>qaSettings.providers.codex.targetLanguage),'en');
  await options.locator('#model-choice').selectOption('custom');
  await options.locator('#model').fill('another-model');assert.equal(await options.locator('#test').isDisabled(),true);assert.equal(await options.locator('#login').isDisabled(),true);
  await options.locator('#save').click();await waitStatus('저장했어요');

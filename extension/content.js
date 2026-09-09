@@ -120,8 +120,8 @@
       const parts = group.map((p,i) => ({ ...p, id: `t${i}`, original: p.node.data }));
       const text = parts.map(p => p.original).join('');
       if (/^H[1-6]$/.test(element.tagName)) heading = text;
-      if (!parts.some(p => !p.locked && /[a-zA-Z]{2}/.test(p.original))) continue;
-      if (!/[a-zA-Z]{2}/.test(text)) continue;
+      if (!parts.some(p => !p.locked && /\p{L}/u.test(p.original))) continue;
+      if (!/\p{L}/u.test(text)) continue;
       // Fixed addresses/URLs/identifiers have no prose to translate.
       if (/^(?:https?:\/\/\S+|0x[0-9a-f]+|(?:[ur]\/|@)[\w.-]+|[\d\s.,_():/-]+)$/i.test(text.trim())) continue;
       if (parts.length > 300 || text.length > 14000) { skipped++; continue; }
@@ -189,10 +189,11 @@
   }
 
   function enableToolbarDrag(bar, section) {
-    let drag = null, suppressClick = false;
+    let drag = null, suppressClick = false, snap = null;
     const finishDrag = (event, canceled = false) => {
       if (!drag || (event?.pointerId !== undefined && event.pointerId !== drag.id)) return;
       const previous = drag; drag = null;
+      const from = bar.getBoundingClientRect();
       if (canceled) suppressClick = true;
       if (previous.moved) {
         suppressClick = true;
@@ -201,15 +202,32 @@
       }
       bar.removeAttribute('data-dragging');
       for (const name of ['--drag-left','--drag-top','--drag-width']) bar.style.removeProperty(name);
+      if (previous.moved && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const to = bar.getBoundingClientRect();
+        snap = bar.animate([
+          {transform:`translate(${from.left-to.left}px, ${from.top-to.top}px)`},
+          {transform:'translate(0, 0)'}
+        ],{duration:420,easing:'cubic-bezier(.22,1,.36,1)'});
+      }
       if (previous.capture.hasPointerCapture(previous.id)) previous.capture.releasePointerCapture(previous.id);
     };
     bar._cancelDrag = () => finishDrag(null,true);
     section.addEventListener('pointerdown',event => {
       if (event.button !== 0 || !event.isPrimary || drag) return;
+      const box = bar.getBoundingClientRect();
+      const interrupted = snap?.playState === 'running';
+      snap?.cancel(); snap = null;
       suppressClick = false;
       cornerRevision++;
       const capture=event.target.closest('button') || section;
       drag = {id:event.pointerId,x:event.clientX,y:event.clientY,corner:toolbarCorner,moved:false,capture};
+      if (interrupted) {
+        Object.assign(drag,{moved:true,offsetX:event.clientX-box.left,offsetY:event.clientY-box.top,width:box.width,height:box.height});
+        bar.style.setProperty('--drag-width',`${box.width}px`);
+        bar.style.setProperty('--drag-left',`${box.left}px`);
+        bar.style.setProperty('--drag-top',`${box.top}px`);
+        bar.setAttribute('data-dragging','');
+      }
       capture.setPointerCapture(event.pointerId);
     });
     section.addEventListener('pointermove',event => {
@@ -251,23 +269,45 @@
         :host{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;font:12px/1.5 system-ui,-apple-system,"Malgun Gothic",sans-serif!important;color:#263e32!important}
         :host([data-corner^="top"]){top:20px!important;bottom:auto!important}
         :host([data-corner$="left"]){left:16px!important;right:auto!important}
-        :host([data-corner$="left"]) section{flex-direction:row-reverse}
+        :host([data-corner$="left"]) button.extra{right:auto;left:calc(100% + 10px)}
+        :host([data-corner$="left"]) button.end{left:calc(100% + 64px)}
         :host([data-dragging]){left:var(--drag-left)!important;top:var(--drag-top)!important;right:auto!important;bottom:auto!important;width:var(--drag-width)!important}
         :host([data-dragging]) section{opacity:1}
         :host([data-dragging]) section,:host([data-dragging]) button{cursor:grabbing}
         :host([data-dragging]) .alert{visibility:hidden}
         *{box-sizing:border-box}
-        section{display:flex;align-items:center;padding:5px;border:1px solid #d9e1d8;border-radius:12px;background:#fffffced;opacity:.58;backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);box-shadow:0 2px 12px #122d220d;transition:opacity .18s,box-shadow .18s}
-        section{touch-action:none;user-select:none;cursor:grab}
-        button{border:0;border-radius:7px;padding:8px 12px;cursor:pointer;font:inherit;white-space:nowrap;background:#eaf2e9;color:#245b40;transition:background .18s,color .18s}
-        button.main{min-width:92px;cursor:grab}
-        button.extra{max-width:0;padding:8px 0;opacity:0;visibility:hidden;overflow:hidden;background:transparent;color:#657467;transition:max-width .18s,padding .18s,opacity .18s,visibility .18s}
-        section:hover,section:focus-within,section[data-error]{opacity:1;box-shadow:0 3px 18px #122d2220}
-        section:hover button.extra,section:focus-within button.extra,:host([data-dragging]) button.extra{max-width:90px;padding:8px 12px;opacity:1;visibility:visible}
-        .action-text{display:none}.state-text{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
-        section:hover .action-text,section:focus-within .action-text,:host([data-dragging]) .action-text{display:inline}
-        section:hover .state-text,section:focus-within .state-text,:host([data-dragging]) .state-text{display:none}
-        section[data-error] .main{background:#fff0e7;color:#93421f}
+        section{position:relative;width:56px;height:56px;border-radius:50%;opacity:.72;touch-action:none;user-select:none;cursor:grab;transition:opacity .2s}
+        button{display:grid;place-items:center;border:1px solid #ffffff38;border-radius:50%;padding:0;cursor:pointer;font:600 11px/1.2 system-ui,-apple-system,"Malgun Gothic",sans-serif;white-space:nowrap;color:#353940;background:rgba(242,243,246,.66);backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);box-shadow:0 2px 10px #171c2814,0 0 0 .5px #222b3b0a;text-shadow:none;transition:background .2s,opacity .2s,transform .2s,visibility .2s}
+        button.main{position:relative;width:56px;height:56px;cursor:grab;font-size:15px}
+        button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+        button.main .brand{width:26px;height:26px;stroke-width:1.8}
+        button.main .control{display:none}
+        section:hover button.main .brand,section:focus-within button.main .brand{display:none}
+        section:hover button.main .control,section:focus-within button.main .control{display:block}
+        .control .play,.control .retry{display:none}
+        section[data-paused] .control .pause,section[data-error] .control .pause{display:none}
+        section[data-paused]:not([data-error]) .control .play,section[data-error] .control .retry{display:block}
+
+        button.extra{position:absolute;top:8px;right:calc(100% + 10px);width:40px;height:40px;opacity:0;visibility:hidden;transform:translateX(8px) scale(.88)}
+        button.end{right:calc(100% + 64px)}
+        button.hide{right:calc(100% + 118px)}
+        :host([data-corner$="left"]) button.hide{left:calc(100% + 118px)}
+        section::before{content:'';position:absolute;top:0;bottom:0;right:100%;width:168px;visibility:hidden}
+        :host([data-corner$="left"]) section::before{right:auto;left:100%}
+        section:hover,section:focus-within,section[data-error]{opacity:1}
+        section:hover::before,section:focus-within::before{visibility:visible}
+        section:hover button.extra,section:focus-within button.extra{opacity:1;visibility:visible;transform:translateX(0) scale(1)}
+        .action-text,.state-text{display:none}
+        section[data-error] .main{background:rgba(255,239,227,.9);color:#93421f}
+
+        section[data-paused] .main{color:#796544}
+        :host([data-dragging]) button.extra,:host([data-dragging]) section::before{visibility:hidden;opacity:0}
+        button.reveal{display:none;position:absolute;right:0;bottom:12px;width:28px;height:32px;border-radius:16px;background:rgba(242,243,246,.35);box-shadow:none;opacity:.4}
+        button.reveal:hover,button.reveal:focus-visible{opacity:1;background:rgba(242,243,246,.8)}
+        :host([data-corner$="left"]) button.reveal{left:0;right:auto}
+        :host([data-concealed]) section{visibility:hidden;pointer-events:none}
+        :host([data-concealed]) section button,:host([data-concealed]) section::before{visibility:hidden!important;pointer-events:none}
+        :host([data-concealed]) button.reveal{display:grid}
         .alert{position:absolute;right:0;bottom:calc(100% + 10px);width:min(320px,calc(100vw - 32px));padding:13px 15px;border:1px solid #e8c7b5;border-radius:12px;background:#fffaf5;color:#78391f;font-size:12px;line-height:1.65;box-shadow:0 5px 24px #39200f1a;overflow-wrap:anywhere;white-space:pre-line}
         .alert::after{content:'';position:absolute;bottom:-6px;right:24px;width:10px;height:10px;background:#fffaf5;border-right:1px solid #e8c7b5;border-bottom:1px solid #e8c7b5;transform:rotate(45deg)}
         :host([data-corner$="left"]) .alert{left:0;right:auto}
@@ -275,7 +315,7 @@
         :host([data-corner^="top"]) .alert{top:calc(100% + 10px);bottom:auto}
         :host([data-corner^="top"]) .alert::after{top:-6px;bottom:auto;transform:rotate(225deg)}
         [hidden]{display:none!important}
-        section button:hover{background:#dcebd9}section button.end:hover,section button.original:hover{background:#eef0e9}
+        section button:hover{background:rgba(250,250,252,.86)}
         button:focus-visible{outline:2px solid #245b40;outline-offset:2px}
         .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
         @media(prefers-reduced-motion:reduce){section,button,button.extra{transition:none}}
@@ -288,7 +328,22 @@
       const actionText=document.createElement('span'); actionText.className='action-text'; actionText.setAttribute('aria-hidden','true'); action.append(stateText,actionText);
       const original = document.createElement('button'); original.className = 'original extra'; original.textContent = '원문'; original.title = '자동 번역을 일시중지하고 원문 보기'; original.addEventListener('click', () => { showOriginal(); });
       const end = document.createElement('button'); end.className = 'end extra'; end.textContent = '종료'; end.title = '자동 번역을 끝내고 원문으로 돌아가기'; end.addEventListener('click', () => { finish(); });
-      section.append(original,end,action,label); shadow.append(style,alert,section);
+      const icon = (markup, className='') => {
+        const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+        if(className)svg.setAttribute('class',className);
+        svg.innerHTML=markup;return svg;
+      };
+      action.append(icon('<path d="M4 9c3-6 5 6 8 0s5 6 8 0M4 15c3-6 5 6 8 0s5 6 8 0"/>','brand'),icon('<g class="pause"><path d="M9 6v12M15 6v12"/></g><g class="play"><path d="m9 5 10 7-10 7Z"/></g><g class="retry"><path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5"/></g>','control'));
+      original.textContent='';original.setAttribute('aria-label','원문 보기');original.append(icon('<path d="M3 5h5c2 0 4 1 4 3v12c0-2-2-3-4-3H3Zm18 0h-5c-2 0-4 1-4 3v12c0-2 2-3 4-3h5Z"/>'));
+      end.textContent='';end.setAttribute('aria-label','번역 종료');end.append(icon('<path d="m7 7 10 10M17 7 7 17"/>'));
+      const closedEye='<path d="M3 8c2 4 5 6 9 6s7-2 9-6M5 11l-2 3M9 14l-1 3M15 14l1 3M19 11l2 3"/>';
+      const hide=document.createElement('button');hide.className='hide extra';hide.title='버튼 숨기기 · 번역은 계속해요';hide.setAttribute('aria-label','버튼 숨기기');hide.append(icon(closedEye));
+      const reveal=document.createElement('button');reveal.className='reveal';reveal.title='술술 버튼 다시 보기';reveal.setAttribute('aria-label','술술 버튼 다시 보기');reveal.append(icon(closedEye));
+      hide.addEventListener('click',()=>{toolbar.setAttribute('data-concealed','');reveal.focus({preventScroll:true});});
+      reveal.addEventListener('click',()=>{toolbar.removeAttribute('data-concealed');action.focus({preventScroll:true});});
+      section.append(original,end,hide,action,label); shadow.append(style,alert,section,reveal);
+      toolbar._hide=hide;toolbar._reveal=reveal;
       toolbar._label = label; toolbar._original = original; toolbar._action = action; toolbar._end = end;
       toolbar._section=section; toolbar._alert=alert; toolbar._stateText=stateText; toolbar._actionText=actionText;
       enableToolbarDrag(toolbar,section);
@@ -296,13 +351,15 @@
     }
     toolbar._label.textContent = failed ? '' : message;
     toolbar._alert.hidden = !failed;
+    if(failed)toolbar.removeAttribute('data-concealed');
     toolbar._alert.textContent = failed ? message : '';
     toolbar._section.toggleAttribute('data-error',failed);
+    toolbar._section.toggleAttribute('data-paused',mode === 'paused');
     const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
     toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
     toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
-    toolbar._action.title = message+'\n드래그해서 화면 모서리로 이동';
+    toolbar._action.title = actionText+' · '+message+'\n드래그해서 화면 모서리로 이동';
     publish();
   }
 
@@ -469,7 +526,7 @@
       }
       busy=false;
       if (stats && stats.totalMs === null) stats.totalMs=Math.round(performance.now()-stats.startedAt);
-      notify(!records.length ? '영어 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `번역 항목 ${skipped}개는 원문 유지` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
+      notify(!records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `번역 항목 ${skipped}개는 원문 유지` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
     } catch(e) {
       if (run !== token) return;
       failed=true;

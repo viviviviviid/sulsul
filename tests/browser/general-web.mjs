@@ -77,6 +77,10 @@ try {
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p id="during-request">Comment arriving while the first translation is running.</p>'));
  await worker.evaluate(()=>{qaHold=false;qaRelease();});
  await translated('#during-request');await settled();
+ await page.locator('#comments').evaluate(el=>el.insertAdjacentHTML('beforeend','<p id="source-ko">한국어 원문도 번역 대상입니다.</p><p id="source-ja">日本語の文章を読みます。</p><p id="source-zh">这是中文内容。</p>'));
+ for(const id of ['#source-ko','#source-ja','#source-zh'])await translated(id);
+ await settled();
+ console.log('PASS Korean, Japanese and Chinese source collection');
  for(const selector of ['#first h2','#second h2','#first-body','#second-body','#nav','#vote','#sidebar','#component h2','#comments p:first-child'])await translated(selector);
  assert.ok(await page.evaluate(()=>closedRoot.querySelector('p').textContent.startsWith('번역: ')));
  assert.ok(await page.evaluate(()=>document.querySelector('#component').shadowRoot.querySelector('#shadow-comment').textContent.startsWith('번역: ')));

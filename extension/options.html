@@ -3,11 +3,15 @@
 <body><main>
 <header><a href="setup.html" class="wordmark">술술<span>●</span></a><span>CHATGPT</span></header>
 <h1>ChatGPT로 연결하고,<br>술술 읽어요.</h1>
-<p class="intro">내 ChatGPT 계정으로 읽던 페이지를 쉽게 번역해요.</p>
+<p class="intro">내 ChatGPT 계정으로 읽던 페이지를 원하는 언어로 쉽게 번역해요.</p>
 <form id="settings"><fieldset id="fields" disabled>
 <p class="note">계정의 Codex 이용 한도가 적용됩니다. 연결 프로그램은 첫 로그인 때 자동으로 준비해요.</p>
 <div class="actions"><button id="login" class="primary" type="button">ChatGPT 연결</button><button id="test" type="button">연결 확인</button></div>
 <details open><summary>모델 설정</summary>
+<label for="target-language">번역할 언어</label>
+<select id="target-language">
+<option value="ko">한국어</option><option value="en">English · 영어</option><option value="ja">日本語 · 일본어</option><option value="zh-Hans">简体中文 · 중국어 간체</option><option value="zh-Hant">繁體中文 · 중국어 번체</option><option value="es">Español · 스페인어</option><option value="fr">Français · 프랑스어</option><option value="de">Deutsch · 독일어</option>
+</select><p class="help">원문 언어는 자동으로 판단해요. 번역 결과는 언어별로 따로 저장됩니다.</p>
 <label for="model-choice">번역 모델</label>
 <select id="model-choice">
 <option value="default">자동 · 계정 기본 모델</option>
@@ -22,7 +26,7 @@
 <p class="help">계정에서 이용 가능한 모델만 사용할 수 있어요. 저장 후 ‘연결 확인’으로 확인해 주세요.</p>
 <label class="checkbox"><input id="fast" type="checkbox">Fast 모드</label>
 <p class="help">지원되는 모델에서 더 빠르게 번역해요. GPT-5.6 기준 속도 약 1.5배, 사용량 차감 2.5배입니다. 모델·계정에 따라 지원 여부가 달라요. Low는 그대로 적용됩니다.</p>
-<button id="save" type="submit">모델 저장</button>
+<button id="save" type="submit">설정 저장</button>
 </details></fieldset></form>
 <p id="status" role="status" aria-live="polite">연결 프로그램을 확인하고 있어요.</p>
 <p class="footnote">모델을 저장하면 진행 중인 번역이 일시중지됩니다. 페이지에서 ‘이어 읽기’를 눌러 주세요.<br>연결 확인은 짧은 예문을 한 번 번역하며 계정 사용량에 포함됩니다.</p>
