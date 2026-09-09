@@ -332,7 +332,9 @@ function installContextMenus() {
   menuInstall = menuInstall.catch(() => {}).then(async () => {
     await menuCall('removeAll');
     const page = { contexts: ['all'], documentUrlPatterns: ['http://*/*', 'https://*/*'] };
-    await menuCall('create', { ...page, id: 'sulsul-start', title: '술술 번역' });
+    const commands=await chrome.commands.getAll();
+    const shortcut=commands.find(command=>command.name==='start-reading')?.shortcut;
+    await menuCall('create', { ...page, id: 'sulsul-start', title: shortcut ? `술술 번역 (${shortcut})` : '술술 번역 (단축키 미설정)' });
   });
   return menuInstall;
 }
@@ -346,11 +348,12 @@ async function handleContextMenu(info, tab) {
 const refreshContextMenus = () => installContextMenus().catch(error => console.warn('술술 메뉴를 만들지 못했습니다.', error));
 chrome.runtime.onInstalled.addListener(refreshContextMenus);
 chrome.runtime.onStartup.addListener(refreshContextMenus);
+chrome.tabs.onActivated?.addListener(refreshContextMenus);
 chrome.contextMenus.onClicked.addListener((info, tab) => handleContextMenu(info, tab).catch(() => {}));
 
 chrome.commands.onCommand.addListener(async command => {
-  if (command !== 'toggle-reading') return;
+  if (!['toggle-reading','start-reading'].includes(command)) return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  try { await runReaderAction(tab, 'sulsul-toggle'); }
+  try { await runReaderAction(tab, command === 'start-reading' ? 'sulsul-start' : 'sulsul-toggle'); }
   catch {} // Chrome internal pages cannot be modified.
 });

@@ -51,7 +51,7 @@ export class CodexConnection extends EventEmitter {
       this.child.stdin.write(JSON.stringify({id,method,params})+'\n');
     });
   }
-  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.10.2'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
+  async initialize(){await this.request('initialize',{clientInfo:{name:'sulsul',title:'술술',version:'0.11.1'}});this.child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');}
   close(error=accountError('codex')) {
     if(this.closed)return;this.closed=true;
     for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(error);}this.pending.clear();

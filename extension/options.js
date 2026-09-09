@@ -30,3 +30,8 @@ $('settings').addEventListener('submit',event=>{event.preventDefault();action(as
 $('test').addEventListener('click',()=>action(async()=>{status('짧은 예문으로 ChatGPT 연결을 확인하고 있어요.');status((await rpc('provider-test')).message);}));
 $('login').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('login.html')}));
 action(async()=>{const result=await rpc('settings-get');if(result.selected!=='codex')throw new Error('ChatGPT 전용 연결 프로그램으로 업데이트해 주세요.');saved=result;render();status('ChatGPT 계정을 연결하면 준비가 끝나요.');});
+
+$('shortcut-settings').addEventListener('click',()=>chrome.tabs.create({url:'chrome://extensions/shortcuts'}));
+async function shortcutStatus(){const list=await chrome.commands.getAll();$('shortcut-state').textContent=list.find(c=>c.name==='start-reading')?.shortcut||'지정 안 함';}
+shortcutStatus().catch(()=>{});window.addEventListener('focus',()=>shortcutStatus().catch(()=>{}));
+$('clear-cache').addEventListener('click',()=>action(async()=>{await rpc('clear-cache');status('저장된 번역을 지웠어요.');}));

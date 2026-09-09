@@ -3,8 +3,14 @@
   const MAX_CONCURRENT_TRANSLATIONS = 4;
   // Mintlify renders prose paragraphs as direct spans, without p elements.
   const BLOCKS = 'h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,figcaption,blockquote,.mdx-content > span';
-  const EXCLUDE = 'pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui]';
+  const EXCLUDE = '[role="timer"],pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui],[data-sulsul-issue]';
   const LOCKED = 'code,kbd,samp,var,[translate="no"],.notranslate';
+  // Sanity stega metadata starts with four zero-width spaces. Preserve ordinary joiners.
+  const readableText = text => text.replace(/\u200b{4}[\u200b-\u200d\ufeff]+/g, '');
+  // Live countdowns change every second and must never become translation jobs.
+  function liveCounter(text) {
+    return text.length<=160 && (/(?:\d+\s*(?:days?|hrs?|hours?|mins?|minutes?|secs?|seconds?|d|h|m|s)\b[ ,:]*){2,}/i.test(text) || /\b\d{1,2}:\d{2}:\d{2}\b/.test(text));
+  }
   const pageUrl = () => location.href.split('#')[0];
   let records = [], busy = false, translated = false, token = 0, complete = 0, skipped = 0, message = '', currentUrl = pageUrl(), toolbar;
   let mode = 'off', waiting = false, control = 0, readyTimer, lastChange = performance.now(), oldDocument;
@@ -43,7 +49,35 @@
     shadowObservers.set(root, observer);
   }
 
+  const issueMarks = new Map();
+  function clearIssue(element) {
+    issueMarks.get(element)?.remove();issueMarks.delete(element);
+  }
+  function clearIssues() { for(const element of issueMarks.keys())clearIssue(element); }
+  function markIssue(element, reason, retryable=false) {
+    if(!element.isConnected)return;
+    const existing=issueMarks.get(element);
+    if(existing?.isConnected && existing._reason===reason)return;
+    clearIssue(element);
+    const host=document.createElement('span');host.dataset.sulsulIssue='';
+    const root=host.attachShadow({mode:'closed'});
+    const style=document.createElement('style');style.textContent=`
+      :host{display:inline-block!important;vertical-align:middle!important;margin-inline:6px!important;font:12px/1.6 system-ui,sans-serif!important;letter-spacing:normal!important;text-transform:none!important}
+      button{font:inherit;cursor:pointer;border:1px solid #d9b97c;border-radius:50%;width:22px;height:22px;padding:0;background:#fff6df;color:#785619}
+      button:focus-visible{outline:2px solid #785619;outline-offset:2px}
+      .detail{display:inline-block;max-width:min(320px,70vw);padding:6px 10px;margin:4px;border-radius:8px;background:#fff8e9;color:#654c22;font:12px/1.6 system-ui,sans-serif;white-space:normal;overflow-wrap:anywhere}
+      .retry{width:auto;height:auto;border-radius:6px;padding:3px 8px;margin-inline-start:6px}
+      [hidden]{display:none!important}
+    `;
+    const button=document.createElement('button');button.type='button';button.textContent='!';button.title=reason;button.setAttribute('aria-label','술술: 이 문단 번역 문제 · '+reason);button.setAttribute('aria-expanded','false');
+    const detail=document.createElement('span');detail.className='detail';detail.hidden=true;detail.textContent=reason;
+    if(retryable){const retry=document.createElement('button');retry.type='button';retry.className='retry';retry.textContent='다시 시도';retry.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();startReading();});detail.append(retry);}
+    button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));});
+    root.append(style,button,detail);host._button=button;host._detail=detail;host._reason=reason;host._retryable=retryable;issueMarks.set(element,host);element.append(host);
+  }
+
   function collect() {
+    for(const [element,mark] of issueMarks)if(!element.isConnected || mark._retryable)clearIssue(element);
     const groups = new Map();
     const reading = new Map();
     const inferred = new WeakSet(), checked = new WeakSet();
@@ -64,7 +98,7 @@
     }
     const walk = (node, primary = null, fallback = null, locked = false, canRead = false, textVisible = true) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        if ((!node.data.trim() && !knownParts.has(node)) || !textVisible) return;
+        if ((!node.data.trim() && !knownParts.has(node)) || !textVisible || liveCounter(node.data)) return;
         const block = primary || fallback || node.parentElement;
         if (!block) return;
         if (node.data.trim()) {
@@ -102,10 +136,15 @@
       for (const child of node.childNodes) walk(child, primary, fallback, locked, canRead, textVisible);
     };
     if (document.body) walk(document.body);
+    for(const element of issueMarks.keys())if(!groups.has(element))clearIssue(element);
     const previous = new Map(records.map(r => [r.element, r]));
     const reusable = new Set();
     for (const r of records) {
       const group = groups.get(r.element);
+      // Keep original text and cached output when only the node identity changes.
+      if (group?.length===r.parts.length && group.every((p,i)=>p.locked===r.parts[i].locked && p.node.data===expected(r,r.parts[i]))) {
+        r.parts=r.parts.map((part,i)=>({...part,node:group[i].node}));
+      }
       if (group?.length === r.parts.length && group.every((p,i) => p.node === r.parts[i].node && p.locked === r.parts[i].locked && p.node.data === expected(r, r.parts[i]))) reusable.add(r);
       else restoreRecord(r); // Restore only our unchanged fragments when a site edits/reuses a block.
     }
@@ -114,17 +153,18 @@
     for (const [element, group] of groups) {
       const old = previous.get(element);
       if (old && reusable.has(old)) {
-        if (/^H[1-6]$/.test(element.tagName)) heading = old.parts.map(p => p.original).join('');
+        if (/^H[1-6]$/.test(element.tagName)) heading = old.parts.map(p => p.source).join('');
         old.reading=reading.get(element);result.push(old); continue;
       }
-      const parts = group.map((p,i) => ({ ...p, id: `t${i}`, original: p.node.data }));
-      const text = parts.map(p => p.original).join('');
+      const parts = group.map((p,i) => ({ ...p, id: `t${i}`, original: p.node.data, source: readableText(p.node.data) }));
+      const text = parts.map(p => p.source).join('');
       if (/^H[1-6]$/.test(element.tagName)) heading = text;
-      if (!parts.some(p => !p.locked && /\p{L}/u.test(p.original))) continue;
+      if (!parts.some(p => !p.locked && /\p{L}/u.test(p.source))) continue;
       if (!/\p{L}/u.test(text)) continue;
       // Fixed addresses/URLs/identifiers have no prose to translate.
       if (/^(?:https?:\/\/\S+|0x[0-9a-f]+|(?:[ur]\/|@)[\w.-]+|[\d\s.,_():/-]+)$/i.test(text.trim())) continue;
-      if (parts.length > 300 || text.length > 14000) { skipped++; continue; }
+      if (parts.length > 300 || text.length > 14000) { skipped++; markIssue(element, parts.length > 300 ? '이 문단의 텍스트 조각이 너무 많아 원문을 유지했어요.' : '이 문단이 너무 길어 원문을 유지했어요.'); continue; }
+      clearIssue(element);
       result.push({ id: `b${nextId++}`, element, heading, parts, result: null, applied: false, status: 'new', reading: reading.get(element) });
     }
     records = result;
@@ -137,7 +177,7 @@
 
   function serialize(record) {
     const navigation=!!record.element.closest('nav,aside,header,footer,[role="navigation"],[role="complementary"],[role="banner"],[role="contentinfo"]');
-    return { id: record.id, cacheKind:navigation?'navigation':'content', heading: record.heading.slice(0,240), parts: record.parts.map(p => ({ id: p.id, text: p.original, locked: p.locked })) };
+    return { id: record.id, cacheKind:navigation?'navigation':'content', heading: record.heading.slice(0,240), parts: record.parts.map(p => ({ id: p.id, text: p.source, locked: p.locked })) };
   }
 
   function unchanged(record, mode) {
@@ -154,6 +194,7 @@
       output.set(part.id, part.text);
     }
     // Only text data changes. No innerHTML, node replacement, href or event-handler changes.
+    clearIssue(record.element);
     record.result = output;
     record.applied = true; record.status = 'done';
     for (const part of editable) part.node.data = output.get(part.id);
@@ -161,6 +202,7 @@
   }
 
   function restore() {
+    clearIssues();
     const restored = records.filter(r => r.applied).length;
     for (const record of records) restoreRecord(record);
     refreshCounts();
@@ -276,9 +318,13 @@
         :host([data-dragging]) section,:host([data-dragging]) button{cursor:grabbing}
         :host([data-dragging]) .alert{visibility:hidden}
         *{box-sizing:border-box}
-        section{position:relative;width:56px;height:56px;border-radius:50%;opacity:.72;touch-action:none;user-select:none;cursor:grab;transition:opacity .2s}
+        section{position:relative;width:48px;height:48px;border-radius:50%;opacity:.72;touch-action:none;user-select:none;cursor:grab;transition:opacity .2s}
         button{display:grid;place-items:center;border:1px solid #ffffff38;border-radius:50%;padding:0;cursor:pointer;font:600 11px/1.2 system-ui,-apple-system,"Malgun Gothic",sans-serif;white-space:nowrap;color:#353940;background:rgba(242,243,246,.66);backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);box-shadow:0 2px 10px #171c2814,0 0 0 .5px #222b3b0a;text-shadow:none;transition:background .2s,opacity .2s,transform .2s,visibility .2s}
-        button.main{position:relative;width:56px;height:56px;cursor:grab;font-size:15px}
+        button.main{position:relative;width:48px;height:48px;cursor:grab;font-size:15px;color:#fff;background:rgba(38,44,55,.8);border-color:#ffffff24;box-shadow:0 3px 12px #1016241c}
+        button[data-label]::after{content:attr(data-label);position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);padding:5px 8px;border-radius:6px;background:#303640;color:#fff;font:11px/1.4 system-ui,sans-serif;white-space:nowrap;opacity:0;visibility:hidden;pointer-events:none;text-shadow:none;box-shadow:none}
+        button[data-label]:hover::after,button[data-label]:focus-visible::after{opacity:1;visibility:visible}
+        :host([data-corner^="top"]) button[data-label]::after{top:calc(100% + 9px);bottom:auto}
+        :host([data-dragging]) button[data-label]::after{display:none}
         button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
         button.main .brand{width:26px;height:26px;stroke-width:1.8}
         button.main .control{display:none}
@@ -288,7 +334,7 @@
         section[data-paused] .control .pause,section[data-error] .control .pause{display:none}
         section[data-paused]:not([data-error]) .control .play,section[data-error] .control .retry{display:block}
 
-        button.extra{position:absolute;top:8px;right:calc(100% + 10px);width:40px;height:40px;opacity:0;visibility:hidden;transform:translateX(8px) scale(.88)}
+        button.extra{position:absolute;top:4px;right:calc(100% + 10px);width:40px;height:40px;opacity:0;visibility:hidden;transform:translateX(8px) scale(.88)}
         button.end{right:calc(100% + 64px)}
         button.hide{right:calc(100% + 118px)}
         :host([data-corner$="left"]) button.hide{left:calc(100% + 118px)}
@@ -300,9 +346,9 @@
         .action-text,.state-text{display:none}
         section[data-error] .main{background:rgba(255,239,227,.9);color:#93421f}
 
-        section[data-paused] .main{color:#796544}
+        section[data-paused] .main{color:#f4da9f}
         :host([data-dragging]) button.extra,:host([data-dragging]) section::before{visibility:hidden;opacity:0}
-        button.reveal{display:none;position:absolute;right:0;bottom:12px;width:28px;height:32px;border-radius:16px;background:rgba(242,243,246,.35);box-shadow:none;opacity:.4}
+        button.reveal{display:none;position:absolute;right:0;bottom:8px;width:28px;height:32px;border-radius:16px;background:rgba(242,243,246,.35);box-shadow:none;opacity:.4}
         button.reveal:hover,button.reveal:focus-visible{opacity:1;background:rgba(242,243,246,.8)}
         :host([data-corner$="left"]) button.reveal{left:0;right:auto}
         :host([data-concealed]) section{visibility:hidden;pointer-events:none}
@@ -315,6 +361,7 @@
         :host([data-corner^="top"]) .alert{top:calc(100% + 10px);bottom:auto}
         :host([data-corner^="top"]) .alert::after{top:-6px;bottom:auto;transform:rotate(225deg)}
         [hidden]{display:none!important}
+        section button.main:hover{background:rgba(38,44,55,.95)}
         section button:hover{background:rgba(250,250,252,.86)}
         button:focus-visible{outline:2px solid #245b40;outline-offset:2px}
         .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
@@ -335,10 +382,10 @@
         svg.innerHTML=markup;return svg;
       };
       action.append(icon('<path d="M4 9c3-6 5 6 8 0s5 6 8 0M4 15c3-6 5 6 8 0s5 6 8 0"/>','brand'),icon('<g class="pause"><path d="M9 6v12M15 6v12"/></g><g class="play"><path d="m9 5 10 7-10 7Z"/></g><g class="retry"><path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 12l-3-5"/></g>','control'));
-      original.textContent='';original.setAttribute('aria-label','원문 보기');original.append(icon('<path d="M3 5h5c2 0 4 1 4 3v12c0-2-2-3-4-3H3Zm18 0h-5c-2 0-4 1-4 3v12c0-2 2-3 4-3h5Z"/>'));
-      end.textContent='';end.setAttribute('aria-label','번역 종료');end.append(icon('<path d="m7 7 10 10M17 7 7 17"/>'));
+      original.dataset.label='원문';original.textContent='';original.setAttribute('aria-label','원문 보기');original.append(icon('<path d="M3 5h5c2 0 4 1 4 3v12c0-2-2-3-4-3H3Zm18 0h-5c-2 0-4 1-4 3v12c0-2 2-3 4-3h5Z"/>'));
+      end.dataset.label='종료';end.textContent='';end.setAttribute('aria-label','번역 종료');end.append(icon('<path d="m7 7 10 10M17 7 7 17"/>'));
       const closedEye='<path d="M3 8c2 4 5 6 9 6s7-2 9-6M5 11l-2 3M9 14l-1 3M15 14l1 3M19 11l2 3"/>';
-      const hide=document.createElement('button');hide.className='hide extra';hide.title='버튼 숨기기 · 번역은 계속해요';hide.setAttribute('aria-label','버튼 숨기기');hide.append(icon(closedEye));
+      const hide=document.createElement('button');hide.className='hide extra';hide.dataset.label='숨기기';hide.title='버튼 숨기기 · 번역은 계속해요';hide.setAttribute('aria-label','버튼 숨기기');hide.append(icon(closedEye));
       const reveal=document.createElement('button');reveal.className='reveal';reveal.title='술술 버튼 다시 보기';reveal.setAttribute('aria-label','술술 버튼 다시 보기');reveal.append(icon(closedEye));
       hide.addEventListener('click',()=>{toolbar.setAttribute('data-concealed','');reveal.focus({preventScroll:true});});
       reveal.addEventListener('click',()=>{toolbar.removeAttribute('data-concealed');action.focus({preventScroll:true});});
@@ -359,7 +406,8 @@
     toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : translated ? '번역 완료' : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
     toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
-    toolbar._action.title = actionText+' · '+message+'\n드래그해서 화면 모서리로 이동';
+    toolbar._action.dataset.label = actionText;
+    toolbar._action.removeAttribute('title');
     publish();
   }
 
@@ -460,7 +508,7 @@
     const charLimit = !complete ? 1800 : visible ? 3200 : 7000;
     const current = []; let size=0, fragments=0;
     for (const {record,priority} of pending) {
-      const n = record.parts.reduce((v,p) => v+p.original.length,0);
+      const n = record.parts.reduce((v,p) => v+p.source.length,0);
       if (current.length && (current.length >= blockLimit || size+n > charLimit || fragments+record.parts.length > 1200 || priority!==pending[0].priority)) break;
       current.push(record); size+=n; fragments+=record.parts.length;
     }
@@ -483,6 +531,7 @@
     busy = true;
     currentUrl = pageUrl();
     const inFlight = new Map();
+    let affected = [];
     const stats = measurements;
     try {
       dirty = true;
@@ -493,14 +542,14 @@
         while (inFlight.size < MAX_CONCURRENT_TRANSLATIONS) {
           const current = nextBatch();
           if (!current.length) break;
-          const page = { title:document.title.slice(0,500), url:location.origin+location.pathname, headings:records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.original).join('').slice(0,240)).slice(0,60), introduction:records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.original).join('')).join('\n').slice(0,2400) };
+          const page = { title:readableText(document.title).slice(0,500), url:location.origin+location.pathname, headings:records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.source).join('').slice(0,240)).slice(0,60), introduction:records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.source).join('')).join('\n').slice(0,2400) };
           const first=records.indexOf(current[0]), last=records.indexOf(current.at(-1))+1;
-          const data = {page,before:records[first-1]?.parts.map(p=>p.original).join('').slice(-1000)||'',after:records[last]?.parts.map(p=>p.original).join('').slice(0,1000)||'',blocks:current.map(serialize)};
+          const data = {page,before:records[first-1]?.parts.map(p=>p.source).join('').slice(-1000)||'',after:records[last]?.parts.map(p=>p.source).join('').slice(0,1000)||'',blocks:current.map(serialize)};
           for (const r of current) r.status='pending';
           const id = current[0].id, sent = performance.now();
           if (stats) { stats.requests++; stats.totalMs=null; }
           // Resolve failures as values so every in-flight response is observed.
-          const task = send('translate',data).then(out => ({id,current,out,sent}),error => ({id,error}));
+          const task = send('translate',data).then(out => ({id,current,out,sent}),error => ({id,current,error}));
           inFlight.set(id,task);
         }
         if (!inFlight.size) { if (dirty) continue; break; }
@@ -508,11 +557,13 @@
         const finished = await Promise.race(inFlight.values());
         inFlight.delete(finished.id);
         if (run !== token || mode !== 'running' || currentUrl !== pageUrl()) return;
+        affected = finished.current;
         if (finished.error) throw finished.error;
         const {current,out,sent} = finished;
         if (!Array.isArray(out?.blocks) || out.blocks.length !== current.length) throw new Error('번역 항목 수가 맞지 않습니다.');
         const applyStarted = performance.now();
         for (const r of current) {
+          affected = [r];
           if (!apply(r,out.blocks.find(b => b.id === r.id))) { r.status='skipped'; dirty=true; }
         }
         refreshCounts();
@@ -526,10 +577,11 @@
       }
       busy=false;
       if (stats && stats.totalMs === null) stats.totalMs=Math.round(performance.now()-stats.startedAt);
-      notify(!records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `번역 항목 ${skipped}개는 원문 유지` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
+      notify(!records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : skipped ? `너무 긴 번역 항목 ${skipped}개는 원문을 유지했어요.` : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
     } catch(e) {
       if (run !== token) return;
       failed=true;
+      for(const r of affected)if(!r.applied)markIssue(r.element, e.message || '번역을 완료하지 못했어요.', true);
       const canceled=interrupt();
       notify(e.message);
       await canceled;

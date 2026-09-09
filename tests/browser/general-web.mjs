@@ -113,6 +113,26 @@ try {
  await until(()=>page.evaluate(()=>document.querySelector('#second-body').lastChild.data==='번역:  Newly edited sentence.'),'edited paragraph');await settled();
  assert.equal((await allSources()).some(t=>t.startsWith('번역: ')),false,'source never contains our previous translation');
  console.log('PASS reused cards and edited paragraphs use the new original source');
+ const beforeClone=await count();
+ for(let i=0;i<3;i++){
+  await page.evaluate(()=>{const p=document.querySelector('#first-body');p.innerHTML=p.innerHTML;});
+  await page.waitForTimeout(1200);await settled();
+ }
+ assert.equal(await count(),beforeClone,'rebuilt translated text nodes retain original provenance');
+ assert.equal((await allSources()).some(t=>t.startsWith('번역: ')),false);
+ await page.evaluate(()=>{
+  const banner=document.createElement('p');banner.id='live-banner';banner.innerHTML='<strong>Network upgrade announcement</strong> <span id="countdown">Mainnet in 13d 10h 58min 59s</span>';
+  document.querySelector('main').append(banner);
+  const timer=document.createElement('span');timer.role='timer';timer.id='semantic-timer';timer.textContent='Countdown 59 seconds';banner.append(timer);
+  window.tick=59;window.ticker=setInterval(()=>{document.querySelector('#countdown').textContent='Mainnet in 13d 10h 58min '+(--tick)+'s';timer.textContent='Countdown '+tick+' seconds';},1000);
+ });
+ await translated('#live-banner strong');await settled();const idleCalls=await count();
+ await page.waitForTimeout(6500);await settled();
+ assert.equal(await count(),idleCalls,'a changing countdown never resends its translated banner');
+ assert.match(await page.locator('#countdown').innerText(),/^Mainnet in/);
+ assert.equal((await allSources()).some(t=>t.includes('Mainnet in')||t.includes('Countdown')),false,'counters never enter AI input');
+ await page.evaluate(()=>clearInterval(ticker));
+ console.log('PASS cloned translations and idle countdowns make no extra AI calls');
 
  await command('sulsul-stop');const paused=await count();
  await page.evaluate(()=>document.querySelector('#comments').insertAdjacentHTML('beforeend','<p id="paused-comment">This reply arrives while paused.</p>'));
@@ -134,11 +154,39 @@ try {
  await page.waitForTimeout(3300);assert.equal(await count(),ended);assert.equal(await page.locator('[data-sulsul-ui]').count(),0);
  console.log('PASS pause, resume, restore all appended content, cached restore, and exit');
 
+ await page.evaluate(()=>{
+  const p=document.createElement('p');p.id='metadata-prose';
+  window.metadataOriginal='Matter Labs'+ '\u200b'.repeat(4)+'\u200c\u200d\ufeff'.repeat(7200)+' opens its software. Preserve 👩‍💻 and می‌روم.';
+  p.textContent=metadataOriginal;document.querySelector('main').append(p);
+ });
+ await command('sulsul-start');await translated('#metadata-prose');await settled();
+ assert.equal((await state()).skipped,0,'invisible metadata does not trigger the size limit');
+ assert.equal(await page.locator('#metadata-prose').textContent(),'번역: Matter Labs opens its software. Preserve 👩‍💻 and می‌روم.');
+ assert.ok((await allSources()).some(t=>t==='Matter Labs opens its software. Preserve 👩‍💻 and می‌روم.'));
+ await command('sulsul-restore');
+ assert.equal(await page.locator('#metadata-prose').textContent(),await page.evaluate(()=>metadataOriginal),'restore keeps original metadata and joiners');
+ await command('sulsul-start');await translated('#metadata-prose');await command('sulsul-start');
+ assert.equal((await state()).mode,'running','start does not toggle off');
+ await command('sulsul-end');
+ console.log('PASS metadata-heavy prose, meaningful joiners, exact restoration and repeated start');
+ await page.evaluate(()=>{const p=document.createElement('p');p.id='oversized';p.textContent='Long prose '.repeat(1500);document.querySelector('main').append(p);});
+ await command('sulsul-start');await settled();
+ assert.equal(await page.locator('#oversized [data-sulsul-issue]').count(),1);
+ assert.equal((await state()).skipped,1);
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('#oversized [data-sulsul-issue]')._button.click()}),tabId);
+ assert.equal(await worker.evaluate(async id=>(await chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('#oversized [data-sulsul-issue]')._detail.hidden}))[0].result,tabId),false);
+ await page.waitForTimeout(3500);assert.equal(await page.locator('#oversized [data-sulsul-issue]').count(),1,'no duplicate markers after scan');
+ await command('sulsul-end');assert.equal(await page.locator('[data-sulsul-issue]').count(),0);
+ console.log('PASS oversized paragraph marker, details, deduplication and cleanup');
  await worker.evaluate(()=>qaMalformed=true);
  await page.goto('https://feed.test/errors',{waitUntil:'load'});
  await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['content.js']}),tabId);
  await command('sulsul-toggle');
  await until(async()=> (await state()).message.includes('수가 맞지'),'format failure');
  const errors=await count();await page.waitForTimeout(3500);assert.equal(await count(),errors,'no automatic error retry loop');
- console.log('PASS failed model response waits for an explicit retry');
+ assert.ok(await page.locator('[data-sulsul-issue]').count()>0,'failed paragraphs are marked');
+ await worker.evaluate(()=>qaMalformed=false);
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},func:()=>document.querySelector('[data-sulsul-issue]')._detail.querySelector('button').click()}),tabId);
+ await settled();assert.equal(await page.locator('[data-sulsul-issue]').count(),0,'successful retry removes markers');
+ console.log('PASS failed model response markers and explicit retry');
 }finally{await context.close();}

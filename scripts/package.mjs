@@ -15,6 +15,7 @@ const stage=fs.mkdtempSync(path.join(dist,'.stage-'));
 const folder=path.join(stage,source?'sulsul':`Sulsul-${version}`);
 for(const name of extension?runtimeFiles.filter(name=>name.startsWith('extension/')):source?sourceFiles:runtimeFiles){
   const target=path.join(folder,extension?name.slice('extension/'.length):name);fs.mkdirSync(path.dirname(target),{recursive:true});
+  if(name.endsWith('.png')){fs.copyFileSync(path.join(root,name),target);continue;}
   let text=fs.readFileSync(path.join(root,name),'utf8');
   if(/\.(ps1|txt)$/.test(name))text='\ufeff'+text.replace(/^\uFEFF/,'').replace(/\r?\n/g,'\r\n');
   fs.writeFileSync(target,text);

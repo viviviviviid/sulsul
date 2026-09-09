@@ -79,7 +79,7 @@ try{
  const collapsed=await barState();assert.equal(collapsed.visible,1);assert.ok(collapsed.opacity<1);
  assert.equal(collapsed.status,'번역 완료');assert.equal(collapsed.alertVisible,false);
  await page.locator('[data-sulsul-ui]').hover();await page.waitForTimeout(250);
- const expanded=await barState();assert.equal(expanded.visible,4);assert.equal(expanded.opacity,1);assert.equal(expanded.width,56);assert.equal(collapsed.width,56);
+ const expanded=await barState();assert.equal(expanded.visible,4);assert.equal(expanded.opacity,1);assert.equal(expanded.width,48);assert.equal(collapsed.width,48);
  await page.screenshot({path:path.join(scratch,'toolbar-expanded.png')});
  await page.mouse.move(0,0);await page.waitForTimeout(250);assert.equal((await barState()).visible,1);
  await page.screenshot({path:path.join(scratch,'toolbar-collapsed.png')});
