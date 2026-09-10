@@ -65,7 +65,7 @@
   }
 
   function hideOriginal(remove=false){
-    clearTimeout(hoverTimer);clearTimeout(hideTimer);originalRecord=null;
+    clearTimeout(hoverTimer);clearTimeout(hideTimer);hideTimer=undefined;originalRecord=null;
     if(descriptionTarget&&originalTip){
       const ids=(descriptionTarget.getAttribute('aria-describedby')||'').split(/\s+/).filter(id=>id&&id!==originalTip.id);
       if(ids.length)descriptionTarget.setAttribute('aria-describedby',ids.join(' '));else descriptionTarget.removeAttribute('aria-describedby');
@@ -89,7 +89,7 @@
       `;
       const card=document.createElement('div');card.className='card';const label=document.createElement('div');label.className='label';label.textContent='원문';
       const body=document.createElement('div');body.className='text';body.dir='auto';card.append(label,body);root.append(style,card);originalTip._text=body;document.documentElement.append(originalTip);
-      originalTip.addEventListener('pointerenter',()=>clearTimeout(hideTimer));
+      originalTip.addEventListener('pointerenter',()=>{clearTimeout(hideTimer);hideTimer=undefined;});
       originalTip.addEventListener('pointerleave',()=>{hideTimer=setTimeout(()=>hideOriginal(),160);});
     }
     originalTip._text.textContent=text;originalTip._text.scrollTop=0;originalTip.hidden=false;
@@ -103,18 +103,36 @@
     if(hoverRoots.has(root))return;hoverRoots.add(root);
     const over=event=>{
       if(!live()||mode==='off'||(event.pointerType&&event.pointerType!=='mouse'&&event.pointerType!=='pen'))return;
-      const path=event.composedPath();if(originalTip&&path.includes(originalTip)){clearTimeout(hideTimer);return;}
+      const path=event.composedPath();if(originalTip&&path.includes(originalTip)){clearTimeout(hideTimer);hideTimer=undefined;return;}
       const record=path.map(node=>hoverRecords.get(node)).find(Boolean);
-      if(!record?.applied||!unchanged(record,'translated')){clearTimeout(hoverTimer);if(originalRecord){clearTimeout(hideTimer);hideTimer=setTimeout(()=>hideOriginal(),160);}return;}
-      clearTimeout(hideTimer);if(record===originalRecord)return;
+      const focus=event.type==='focusin';
+      if(!record?.applied||!unchanged(record,'translated')||(!focus&&!overTranslatedText(record,event.clientX,event.clientY))){
+        clearTimeout(hoverTimer);
+        if(!originalTip||originalTip.hidden)hideOriginal();
+        else if(!hideTimer)hideTimer=setTimeout(()=>hideOriginal(),160);
+        return;
+      }
+      clearTimeout(hideTimer);hideTimer=undefined;if(record===originalRecord)return;
       hideOriginal();originalRecord=record;
-      const focus=event.type==='focusin',box=record.element.getBoundingClientRect(),x=focus?box.left+24:event.clientX,y=focus?box.top:event.clientY;
+      const box=record.element.getBoundingClientRect(),x=focus?box.left+24:event.clientX,y=focus?box.top:event.clientY;
       hoverTimer=setTimeout(()=>showOriginalTip(record,x,y,focus?event.target:null),focus?0:320);
     };
     root.addEventListener('pointerover',over,{capture:true,signal:lifecycle.signal});
+    root.addEventListener('pointermove',over,{capture:true,passive:true,signal:lifecycle.signal});
     root.addEventListener('focusin',over,{capture:true,signal:lifecycle.signal});
     root.addEventListener('pointerout',event=>{if(!event.relatedTarget)hideOriginal();},{capture:true,signal:lifecycle.signal});
     root.addEventListener('focusout',()=>{if(descriptionTarget)hideOriginal();},{capture:true,signal:lifecycle.signal});
+  }
+
+  function overTranslatedText(record,x,y){
+    // Text ranges follow the current translated line wraps, excluding paragraph padding
+    // and the empty space after short final lines. Never use the element's full box.
+    const range=document.createRange();
+    return record.parts.some(part=>{
+      if(part.locked||!part.node.isConnected||!part.node.data.trim())return false;
+      range.selectNodeContents(part.node);
+      return [...range.getClientRects()].some(box=>box.width>0&&x>=box.left&&x<box.right&&y>=box.top&&y<box.bottom);
+    });
   }
 
   function retryIssue(element) {
