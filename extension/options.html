@@ -4,6 +4,7 @@
 <header><a href="setup.html" class="wordmark">술술<span>●</span></a><a href="setup.html">사용 안내</a></header>
 <h1>설정</h1>
 <p class="intro">언어와 모델을 선택하세요.</p>
+<section class="card"><label class="row tooltip-setting" for="original-tooltip"><span><strong>원문 툴팁</strong><span class="help">번역된 글자에 커서를 올리면 원문을 보여줘요.</span></span><input id="original-tooltip" type="checkbox" role="switch" disabled></label><p id="tooltip-status" role="status" class="help" hidden></p></section>
 <section class="card"><div class="row"><div><strong>사용 기록</strong><p class="help">모델·입력·출력 토큰과 API 환산액을 확인하세요.</p></div><a href="history.html">기록 보기 →</a></div></section>
 <section class="card motion-card" aria-labelledby="motion-heading"><h2 id="motion-heading">네비게이션 버튼 모션</h2><p class="help">번역 중에만 움직여요. 고르면 바로 적용됩니다.</p><fieldset><legend class="motion-sr-only">번역 중 모션 선택</legend><div id="motion-choices"></div></fieldset><p id="motion-status" role="status" class="help">미리보기와 선택은 AI를 사용하지 않습니다.</p></section>
 <form id="settings"><fieldset id="fields" disabled>
@@ -32,6 +33,6 @@
 </div></fieldset></form>
 <p id="status" role="status" aria-live="polite">연결 프로그램을 확인하고 있어요.</p>
 <p class="footnote">설정을 저장하면 번역이 일시중지돼요. 연결 확인은 로그인 상태만 확인하며 AI를 호출하지 않습니다.</p>
-<section class="card"><div class="row"><div><strong>실행 단축키</strong><p id="shortcut-state" class="help">확인 중</p></div><button id="shortcut-settings" type="button">변경</button></div><hr style="border:0;border-top:1px solid #eee;margin:18px 0"><div class="row"><div><strong>저장된 번역</strong><p class="help">다시 읽을 때 같은 번역을 재사용해요.</p></div><button id="clear-cache" type="button">지우기</button></div></section><details><summary>어떤 내용이 전달되나요?</summary><p>읽기를 켠 페이지의 번역 대상 텍스트와 주변 문맥, 페이지 제목·주소를 ChatGPT 연결을 통해 OpenAI에 보냅니다. 술술 자체 서버는 없습니다. 번역 결과는 이 Chrome 프로필에 저장되며 위에서 지울 수 있어요.</p></details>
+<section class="card"><div class="row"><div><strong>실행 단축키</strong><p id="shortcut-state" class="help">확인 중</p></div><button id="shortcut-settings" type="button">변경</button></div><hr style="border:0;border-top:1px solid #eee;margin:18px 0"><div class="row"><div><strong>저장된 번역</strong><p class="help">다시 읽을 때 같은 번역을 재사용해요.</p></div><button id="clear-cache" type="button">지우기</button></div></section><details><summary>어떤 내용이 전달되나요?</summary><p>읽기를 켠 페이지의 번역 대상 텍스트와 짧은 인접 원문, 페이지 및 문단 제목을 ChatGPT 연결을 통해 OpenAI에 보냅니다. 술술 자체 서버는 없습니다. 번역 결과는 이 Chrome 프로필에 저장되며 위에서 지울 수 있어요.</p></details>
 <footer><a href="setup.html">설치 · 문제 해결</a><span>술술 · MIT Open Source</span></footer>
 <script src="motion.js"></script><script src="motion-settings.js"></script><script src="options.js"></script></main></body></html>

@@ -1,4 +1,17 @@
 const $=id=>document.getElementById(id);
+// Reader display preferences save independently of the AI connection/model form.
+let tooltipSaved=true,tooltipSettingsRevision=0;
+const tooltipInput=$('original-tooltip'),tooltipStatus=$('tooltip-status');
+function renderTooltipSetting(value){tooltipSaved=value!==false;tooltipInput.checked=tooltipSaved;}
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes['original-tooltip']){tooltipSettingsRevision++;renderTooltipSetting(changes['original-tooltip'].newValue);}});
+const initialTooltipSettingsRevision=tooltipSettingsRevision;
+chrome.storage.local.get('original-tooltip').then(data=>{if(tooltipSettingsRevision===initialTooltipSettingsRevision)renderTooltipSetting(data['original-tooltip']);}).catch(()=>{renderTooltipSetting(true);tooltipStatus.hidden=false;tooltipStatus.textContent='설정을 읽지 못했어요. 다시 선택해 주세요.';}).finally(()=>{tooltipInput.disabled=false;});
+tooltipInput.addEventListener('change',async()=>{
+  const value=tooltipInput.checked;tooltipInput.disabled=true;
+  try{await chrome.storage.local.set({'original-tooltip':value});renderTooltipSetting(value);tooltipStatus.hidden=true;}
+  catch{tooltipInput.checked=tooltipSaved;tooltipStatus.hidden=false;tooltipStatus.textContent='저장하지 못했어요. 다시 시도해 주세요.';}
+  finally{tooltipInput.disabled=false;}
+});
 let saved,dirty=false,busy=false;
 const status=(text,error=false)=>{$('status').textContent=text;$('status').className=error?'error':'';};
 async function rpc(type,data){const reply=await chrome.runtime.sendMessage({type,data});if(!reply?.ok)throw new Error(reply?.error||'연결 프로그램을 확인해 주세요.');return reply.result;}

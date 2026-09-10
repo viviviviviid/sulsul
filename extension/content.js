@@ -28,6 +28,7 @@
   let knownParts = new WeakMap();
   let hoverRecords=new WeakMap(),originalTip,originalRecord,hoverTimer,hideTimer,descriptionTarget;
   const hoverRoots=new WeakSet();
+  let originalTooltipEnabled=false,tooltipRevision=0;
   let providerRevision = 'initial';
   let measurements = null;
   const corners = new Set(['top-left','top-right','bottom-left','bottom-right']);
@@ -74,7 +75,7 @@
     if(originalTip){originalTip.hidden=true;if(remove){originalTip.remove();originalTip=null;}}
   }
   function showOriginalTip(record,x,y,focusTarget){
-    if(!live()||mode==='off'||document.hidden||!record.applied||!unchanged(record,'translated'))return hideOriginal();
+    if(!live()||!originalTooltipEnabled||mode==='off'||document.hidden||!record.applied||!unchanged(record,'translated'))return hideOriginal();
     const text=record.parts.map(p=>readableText(p.original)).join('');
     if(!text.trim())return hideOriginal();
     if(!originalTip){
@@ -102,7 +103,7 @@
   function watchOriginalHover(root){
     if(hoverRoots.has(root))return;hoverRoots.add(root);
     const over=event=>{
-      if(!live()||mode==='off'||(event.pointerType&&event.pointerType!=='mouse'&&event.pointerType!=='pen'))return;
+      if(!live()||!originalTooltipEnabled||mode==='off'||(event.pointerType&&event.pointerType!=='mouse'&&event.pointerType!=='pen'))return;
       const path=event.composedPath();if(originalTip&&path.includes(originalTip)){clearTimeout(hideTimer);hideTimer=undefined;return;}
       const record=path.map(node=>hoverRecords.get(node)).find(Boolean);
       const focus=event.type==='focusin';
@@ -680,9 +681,17 @@
         while (inFlight.size < MAX_CONCURRENT_TRANSLATIONS) {
           const current = nextBatch();
           if (!current.length) break;
-          const page = { title:readableText(document.title).slice(0,500), url:location.origin+location.pathname, headings:records.filter(r => /^H[1-6]$/.test(r.element.tagName)).map(r => r.parts.map(p => p.source).join('').slice(0,240)).slice(0,60), introduction:records.filter(r => r.reading).slice(0,4).map(r => r.parts.map(p => p.source).join('')).join('\n').slice(0,2400) };
-          const first=records.indexOf(current[0]), last=records.indexOf(current.at(-1))+1;
-          const data = {page,before:records[first-1]?.parts.map(p=>p.source).join('').slice(-1000)||'',after:records[last]?.parts.map(p=>p.source).join('').slice(0,1000)||'',blocks:current.map(serialize)};
+          // Keep full title/URL for existing cache identity, not for the AI prompt.
+          const page = {title:readableText(document.title).slice(0,500),url:location.origin+location.pathname};
+          let contextBudget=560;
+          const blocks=current.map(record=>{
+            const block=serialize(record),previous=records[records.indexOf(record)-1];
+            if(contextBudget>0&&block.cacheKind!=='navigation'&&record.reading&&previous?.reading&&!current.includes(previous)&&previous.heading===record.heading&&previous.element.parentElement===record.element.parentElement&&record.element.matches('p')&&previous.element.matches('p')){
+              block.context=previous.parts.map(p=>p.source).join('').slice(-Math.min(280,contextBudget));contextBudget-=block.context.length;
+            }
+            return block;
+          });
+          const data = {page,blocks};
           for (const r of current) r.status='pending';
           const id = current[0].id, sent = performance.now();
           hadRequests=true;
@@ -850,7 +859,13 @@
   globalThis.__sulsul = { state,dispose };
   const initialMotionRevision=motionRevision;
   chrome.storage.local.get('toolbar-motion').then(data=>{if(motionRevision===initialMotionRevision){toolbarMotion=motion.normalize(data['toolbar-motion']);if(toolbar)toolbar._motion.dataset.motion=toolbarMotion;}}).catch(()=>{});
-  function onStorageChange(changes,area){if(!live())return;if(area==='local'&&changes['toolbar-motion']){motionRevision++;toolbarMotion=motion.normalize(changes['toolbar-motion'].newValue);if(toolbar)toolbar._motion.dataset.motion=toolbarMotion;}}
+  const initialTooltipRevision=tooltipRevision;
+  chrome.storage.local.get('original-tooltip').then(data=>{if(live()&&tooltipRevision===initialTooltipRevision)originalTooltipEnabled=data['original-tooltip']!==false;}).catch(()=>{});
+  function onStorageChange(changes,area){
+    if(!live()||area!=='local')return;
+    if(changes['toolbar-motion']){motionRevision++;toolbarMotion=motion.normalize(changes['toolbar-motion'].newValue);if(toolbar)toolbar._motion.dataset.motion=toolbarMotion;}
+    if(changes['original-tooltip']){tooltipRevision++;originalTooltipEnabled=changes['original-tooltip'].newValue!==false;if(!originalTooltipEnabled)hideOriginal();}
+  }
   chrome.storage.onChanged.addListener(onStorageChange);
   const initialCornerRevision = cornerRevision;
   chrome.storage.local.get('toolbar-corner').then(saved => {

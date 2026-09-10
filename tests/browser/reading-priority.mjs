@@ -54,7 +54,9 @@ try {
  assert.ok(Math.max(...navigationBatches)>8,'short navigation labels share larger requests');
  assert.ok(navigationBatches.every(n=>n<=24),'all requests respect the host block limit');
  assert.equal(navigationBatches.reduce((a,b)=>a+b,0),40,'every navigation label is submitted once');
- console.log('PASS inferred main content before large navigation; menu eventually translated');
+ const compactRequests=await worker.evaluate(()=>qaCalls.map(c=>c.data));
+ for(const data of compactRequests){assert.equal(data.page.headings,undefined);assert.equal(data.page.introduction,undefined);assert.equal(data.before,undefined);assert.equal(data.after,undefined);assert.ok(data.blocks.reduce((n,b)=>n+(b.context?.length||0),0)<=560);for(const b of data.blocks){assert.ok((b.context?.length||0)<=280);if(b.cacheKind==='navigation')assert.equal(b.context,undefined);}}
+ console.log('PASS inferred main content before large navigation; compact context excludes page-wide data and navigation neighbors');
  await worker.evaluate(id=>chrome.tabs.sendMessage(id,{type:'sulsul-end'}),id);
  const longText='A verifier checks messages across independent networks and preserves every condition before delivery. Readers can review the explanation at their own pace while the next sections are prepared. '.repeat(2);
  await context.route('https://feed.test/large',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8"><style>body{margin:0}main{width:800px;margin:auto}p{height:80px;margin:0;font:16px/20px system-ui}</style><main>'+Array.from({length:200},(_,i)=>'<p id="p'+i+'">Paragraph '+i+'. '+longText+'</p>').join('')+'</main>'}));
