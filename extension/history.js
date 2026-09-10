@@ -24,6 +24,8 @@ function render(){
   cell(new Date(entry.startedAt).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}),entry.site||kinds[entry.kind]||'연결 확인');
   cell(entry.model==='default'?'계정 기본 모델':entry.model,(entry.modelResolved?'':'모델 확인 전 · ')+(entry.fast?'Fast 요청 · ':'')+(entry.rerouted?'모델 전환 · ':'')+(kinds[entry.kind]||'번역')+' · '+entry.blocks+'문단');
   const state=cell('');const badge=document.createElement('span');badge.className='badge '+(Object.hasOwn(statuses,entry.status)?entry.status:'');badge.textContent=statuses[entry.status]||'미확인';state.append(badge);
+  if(entry.repeatedBlocks>0){const overlap=document.createElement('small');overlap.textContent='이전 요청과 겹침 '+entry.repeatedBlocks+'개';state.append(overlap);}
+  if(entry.fingerprint)state.title='문단 묶음 식별값: '+entry.fingerprint+' · 재시도나 캐시 삭제 후에도 겹칠 수 있습니다.';
   cell(number(entry.usage?.inputTokens),entry.usage?'캐시 읽기 '+number(entry.usage.cachedInputTokens)+' / 쓰기 '+number(entry.usage.cacheWriteInputTokens):'');
   cell(number(entry.usage?.outputTokens),entry.usage?'추론 '+number(entry.usage.reasoningOutputTokens)+' 포함':'');
   cell(money(entry.cost?.usd),entry.cost?entry.cost.priceDate+' · '+entry.cost.basis:'산정 불가');
@@ -50,7 +52,7 @@ $('chart-metric').addEventListener('change',render);$('chart-group').addEventLis
 $('previous').addEventListener('click',()=>{page--;render();});$('next').addEventListener('click',()=>{page++;render();});
 $('export').addEventListener('click',()=>{
  const csvCell=value=>{let s=String(value??'');if(/^\s*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};
- const rows=[['started_at','site','kind','model','model_resolved','fast_requested','status','input_tokens','cached_input_tokens','cache_write_input_tokens','output_tokens','reasoning_output_tokens','api_reference_usd','price_date','price_basis','duration_ms'],...visible.map(e=>[new Date(e.startedAt).toISOString(),e.site,e.kind,e.model,e.modelResolved,e.fast,e.status,e.usage?.inputTokens,e.usage?.cachedInputTokens,e.usage?.cacheWriteInputTokens,e.usage?.outputTokens,e.usage?.reasoningOutputTokens,e.cost?.usd,e.cost?.priceDate,e.cost?.basis,e.durationMs])];
+ const rows=[['started_at','site','kind','model','model_resolved','fast_requested','status','input_tokens','cached_input_tokens','cache_write_input_tokens','output_tokens','reasoning_output_tokens','api_reference_usd','price_date','price_basis','duration_ms','request_id','source_fingerprint','repeated_blocks'],...visible.map(e=>[new Date(e.startedAt).toISOString(),e.site,e.kind,e.model,e.modelResolved,e.fast,e.status,e.usage?.inputTokens,e.usage?.cachedInputTokens,e.usage?.cacheWriteInputTokens,e.usage?.outputTokens,e.usage?.reasoningOutputTokens,e.cost?.usd,e.cost?.priceDate,e.cost?.basis,e.durationMs,e.id,e.fingerprint,e.repeatedBlocks])];
  const url=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
  const link=document.createElement('a');link.href=url;link.download='sulsul-usage-'+new Date().toISOString().slice(0,10)+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });

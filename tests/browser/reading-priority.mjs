@@ -55,4 +55,49 @@ try {
  assert.ok(navigationBatches.every(n=>n<=24),'all requests respect the host block limit');
  assert.equal(navigationBatches.reduce((a,b)=>a+b,0),40,'every navigation label is submitted once');
  console.log('PASS inferred main content before large navigation; menu eventually translated');
+ await worker.evaluate(id=>chrome.tabs.sendMessage(id,{type:'sulsul-end'}),id);
+ const longText='A verifier checks messages across independent networks and preserves every condition before delivery. Readers can review the explanation at their own pace while the next sections are prepared. '.repeat(2);
+ await context.route('https://feed.test/large',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8"><style>body{margin:0}main{width:800px;margin:auto}p{height:80px;margin:0;font:16px/20px system-ui}</style><main>'+Array.from({length:200},(_,i)=>'<p id="p'+i+'">Paragraph '+i+'. '+longText+'</p>').join('')+'</main>'}));
+ await worker.evaluate(()=>{qaCalls=[];qaMaxActive=0;qaHold=true;});await page.goto('https://feed.test/large');
+ await worker.evaluate(id=>chrome.scripting.executeScript({target:{tabId:id},files:['motion.js','content.js']}),id);
+ const command=type=>worker.evaluate(({id,type})=>chrome.tabs.sendMessage(id,{type},{frameId:0}),{id,type});
+ const until=async(fn,label)=>{for(let i=0;i<160;i++){try{if(await fn())return;}catch(e){if(!/Receiving end does not exist/.test(e.message))throw e;}await page.waitForTimeout(60);}throw new Error(label);};
+ await command('sulsul-start');await until(()=>worker.evaluate(()=>qaHeld.size===4),'first visible requests');
+ assert.ok(await worker.evaluate(()=>qaCalls.every(c=>c.data.blocks.length<=4)),'first viewport stays small');
+ await worker.evaluate(()=>qaRelease());await until(()=>worker.evaluate(()=>qaCalls.some(c=>c.data.blocks.length===12)),'nearby batch');
+ assert.ok(await worker.evaluate(()=>qaCalls.filter(c=>c.data.blocks.length===12).every(c=>c.data.blocks.reduce((n,b)=>n+b.parts.reduce((n,p)=>n+p.text.length,0),0)<=5000)));
+ await worker.evaluate(()=>{qaHold=false;qaRelease();});
+ const settled=()=>until(async()=>{const s=await command('sulsul-state');return !s.busy&&!s.waiting&&s.translated;},'reading range settled');
+ await settled();const topCalls=await worker.evaluate(()=>qaCalls.length);
+ sources=await worker.evaluate(()=>qaCalls.flatMap(c=>c.data.blocks.flatMap(b=>b.parts.map(p=>p.text))));
+ const indexes=sources.map(s=>Number(s.match(/Paragraph (\d+)/)[1]));assert.ok(Math.max(...indexes)<=37,'only current viewport plus two screens are sent');
+ assert.ok((await command('sulsul-state')).remaining>150);assert.match((await command('sulsul-state')).message,/읽는 범위/);
+ await page.waitForTimeout(3500);assert.equal(await worker.evaluate(()=>qaCalls.length),topCalls,'distant source never trickles into idle requests');
+ assert.equal(await page.locator('#p100').textContent(),'Paragraph 100. '+longText);
+ await worker.evaluate(()=>qaHold=true);await page.locator('#p170').scrollIntoViewIfNeeded();
+ await until(()=>worker.evaluate(n=>qaCalls.length>n,topCalls),'new viewport request');
+ const next=await worker.evaluate(n=>qaCalls[n].data.blocks,topCalls);assert.ok(next.some(b=>b.parts.some(p=>p.text.includes('Paragraph 170.'))));assert.ok(next.length<=8);
+ // Switching tabs stops dispatch, while already-submitted results are retained.
+ // Headless Chromium reports every tab visible. Emulate its visibility signal in the isolated world.
+ const visibility=hidden=>worker.evaluate(({id,hidden})=>chrome.scripting.executeScript({target:{tabId:id},func:hidden=>{
+   Object.defineProperty(document,'hidden',{configurable:true,get:()=>hidden});
+   Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>hidden?'hidden':'visible'});
+   document.dispatchEvent(new Event('visibilitychange'));
+ },args:[hidden]}),{id,hidden});
+ await visibility(true);
+ const hiddenCalls=await worker.evaluate(()=>qaCalls.length);await worker.evaluate(()=>qaRelease());
+ await until(async()=>!(await command('sulsul-state')).busy,'in-flight work drains in background');
+ await page.waitForTimeout(3500);assert.equal(await worker.evaluate(()=>qaCalls.length),hiddenCalls,'hidden tabs do not dispatch more work');
+ assert.ok((await page.locator('#p170').innerText()).startsWith('번역: '),'already-submitted translations still apply');
+ await page.evaluate(()=>scrollTo(0,8000));await page.waitForTimeout(700);assert.equal(await worker.evaluate(()=>qaCalls.length),hiddenCalls);
+ await worker.evaluate(()=>qaHold=false);await visibility(false);await until(async()=>(await page.locator('#p100').innerText()).startsWith('번역: '),'visible tab resumes');await settled();
+ assert.ok((await page.locator('#p100').innerText()).startsWith('번역: '),'returning to the tab resumes the current reading range');
+ const all=await worker.evaluate(()=>qaCalls.flatMap(c=>c.data.blocks.map(b=>b.id)));assert.equal(new Set(all).size,all.length,'no duplicate submissions across scroll and tab switches');assert.ok(all.length<200);
+ assert.ok(await worker.evaluate(()=>qaCalls.every(c=>c.data.blocks.length<=24&&c.data.blocks.reduce((n,b)=>n+b.parts.reduce((n,p)=>n+p.text.length,0),0)<=12000)));
+ await visibility(true);const drained=await worker.evaluate(()=>qaCalls.length);await page.evaluate(()=>scrollTo(0,12000));await page.waitForTimeout(700);assert.equal(await worker.evaluate(()=>qaCalls.length),drained,'hidden idle reader stays silent');
+ await page.evaluate(()=>scrollTo(0,0));await visibility(false);
+ const beforeReturn=await worker.evaluate(()=>qaCalls.length);await page.evaluate(()=>scrollTo(0,0));await page.waitForTimeout(1000);await settled();assert.equal(await worker.evaluate(()=>qaCalls.length),beforeReturn,'return to translated range makes no AI call');
+ await page.reload();await settled();assert.equal(await worker.evaluate(()=>qaCalls.length),beforeReturn,'refresh reuses cached reading range');
+ console.log('PASS viewport + two-screen horizon, idle restraint, scroll priority, hidden tab drain/resume and cache reuse without duplicate submissions');
+
 } finally {await context.close();}

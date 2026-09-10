@@ -9,8 +9,8 @@ function render(){
  $('restore').hidden=!connected||!reader.translated;
  $('end').hidden=!connected||!reader.mode||reader.mode==='off';
  $('hint').hidden=!connected||!available||reader.failed||!!reader.skipped||reader.mode!=='running'||reader.busy||reader.waiting;
- $('hint').textContent='다음 페이지도 자동으로 번역합니다.';
- $('progress').textContent=reader.failed?reader.message:reader.skipped?'번역하지 못한 문단의 ! 표시를 확인해 주세요.':reader.busy?'번역 중 · '+reader.complete+' / '+reader.total:reader.mode==='paused'?'자동 번역 일시중지':reader.waiting?'페이지를 준비하고 있어요.':reader.translated?'번역 완료':reader.mode==='running'?'자동 번역 켜짐':'';
+ $('hint').textContent=reader.remaining?'스크롤하면 필요한 부분을 이어서 번역합니다.':'다음 페이지도 자동으로 번역합니다.';
+ $('progress').textContent=reader.failed?reader.message:reader.skipped?'번역하지 못한 문단의 ! 표시를 확인해 주세요.':reader.busy?'번역 중 · '+reader.complete+'개 처리':reader.mode==='paused'?'자동 번역 일시중지':reader.waiting?'페이지를 준비하고 있어요.':reader.background&&reader.mode==='running'?'다른 탭에서 대기 중':reader.translated?(reader.remaining?'읽는 범위 번역 완료':'번역 완료'):reader.mode==='running'?'자동 번역 켜짐':'';
  $('reading-status').hidden=!connected||!available||!$('progress').textContent;
  $('reading-status').dataset.tone=reader.failed?'error':reader.skipped?'warning':reader.mode==='running'&&!reader.busy&&!reader.waiting?'success':'neutral';
 }

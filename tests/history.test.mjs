@@ -51,3 +51,25 @@ test('history retention is bounded and does not delete unrelated files',()=>{
   history.clear();assert.equal(fs.readFileSync(path.join(history.directory,'keep.txt'),'utf8'),'keep');
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('private fingerprints find repeated sources across batches and restarts without storing source text',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'sulsul-fingerprints-')),config={schema:path.join(root,'host','translation.schema.json')};
+ try{
+  const provider={model:'gpt-5.3-codex-spark',targetLanguage:'ko'},history=new UsageHistory(config);
+  const block=(id,text)=>({id,heading:'PRIVATE HEADING',parts:[{id:'t0',text,locked:false}]});
+  const data={page:{url:'https://example.com/private?token=SECRET',title:'PRIVATE TITLE'},blocks:[block('b0','PRIVATE SOURCE'),block('b1','SECOND SOURCE')]};
+  const first=history.begin(provider,data,'translation');history.finish(first,'success',{usage});await new Promise(resolve=>setTimeout(resolve,2));
+  // Changing DOM IDs, neighboring context and batch order must not hide a repeated source.
+  const restarted=new UsageHistory(config),second=restarted.begin(provider,{...data,before:'new context',blocks:[block('b99','SECOND SOURCE'),block('b52','PRIVATE SOURCE')]},'translation');
+  assert.deepEqual(second.fingerprints.blocks,[first.fingerprints.blocks[1],first.fingerprints.blocks[0]]);assert.equal(second.fingerprints.batch,first.fingerprints.batch);
+  assert.notEqual(history.fingerprints({...provider,fast:true},data).batch,first.fingerprints.batch);
+  assert.notEqual(history.fingerprints(provider,{...data,page:{...data.page,title:'Different context'}}).batch,first.fingerprints.batch);
+  const one=history.fingerprints(provider,{...data,blocks:[block('b77','PRIVATE SOURCE')]});assert.equal(one.blocks[0],first.fingerprints.blocks[0]);
+  // Read-only diagnostics compare retained entries and never expose per-block digests to Chrome.
+  const entries=restarted.read().entries,compared=entries.find(e=>e.id===second.id);assert.equal(compared.repeatedBlocks,2);assert.equal(compared.fingerprint,first.fingerprints.batch);assert.ok(!('fingerprints' in compared));
+  for(const name of history.files()){const text=fs.readFileSync(path.join(history.directory,name),'utf8');for(const secret of ['PRIVATE','SECOND SOURCE','SECRET','/private'])assert.ok(!text.includes(secret));}
+  const other=new UsageHistory({schema:path.join(root,'another','host','translation.schema.json')});assert.notEqual(other.fingerprints(provider,data).batch,first.fingerprints.batch,'installations use different secrets');
+  const before=restarted.files().length;restarted.read();assert.equal(restarted.files().length,before,'reading does not add requests');
+  restarted.clear();assert.equal(restarted.read().entries.length,0);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

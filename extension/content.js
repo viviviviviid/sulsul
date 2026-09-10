@@ -52,7 +52,7 @@
   }
   function pruneToolbars(){for(const node of document.querySelectorAll('[data-sulsul-ui]'))if(node!==toolbar)node.remove();}
 
-  function state() { return { mode, waiting, busy, failed, translated, complete, total: records.length, skipped, message, measurements }; }
+  function state() { return { mode, waiting, busy, failed, translated, complete, total: records.length, remaining:records.filter(r=>r.status==='new'||r.status==='pending').length, background:document.hidden, skipped, message, measurements }; }
   function findRoot() { return document.body; }
 
   function expected(record, part) { return record.applied && !part.locked ? record.result.get(part.id) : part.original; }
@@ -457,7 +457,7 @@
     toolbar._motion.dataset.motion=toolbarMotion;
     toolbar._motion.toggleAttribute('data-active',mode==='running'&&busy&&!failed);
     const actionText = failed ? '다시 시도' : mode === 'paused' ? '이어 읽기' : '일시중지';
-    toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}/${records.length}` : skipped ? '일부 문단 확인 필요' : translated ? '번역 완료' : '자동 번역 켜짐';
+    toolbar._stateText.textContent = failed ? '번역 오류' : mode === 'paused' ? '일시중지' : waiting ? '준비 중' : busy ? `번역 중 · ${complete}개 처리` : skipped ? '일부 문단 확인 필요' : document.hidden ? '다른 탭에서 대기 중' : translated ? (records.some(r=>r.status==='new')?'읽는 범위 번역 완료':'번역 완료') : '자동 번역 켜짐';
     toolbar._actionText.textContent = actionText;
     toolbar._action.setAttribute('aria-label',`${toolbar._stateText.textContent} · ${actionText}`);
     toolbar._action.dataset.label = actionText;
@@ -548,19 +548,21 @@
   }
 
   function nextBatch() {
+    if(document.hidden)return [];
     const ranked = records.filter(r => r.status === 'new' || r.status === 'pending').map(r => {
       const box = r.element.getBoundingClientRect();
       const onScreen = box.bottom >= 0 && box.top <= innerHeight && box.right>0 && box.left<innerWidth;
       const nearby = box.top>innerHeight && box.top<=innerHeight*2;
-      return { record:r, priority:r.reading && onScreen ? 0 : r.reading && nearby ? 1 : onScreen ? 2 : 3, distance:onScreen ? Math.max(0,box.top) : Math.abs(box.top) };
-    }).sort((a,b) => a.priority-b.priority || a.distance-b.distance);
+      return { record:r, inRange:box.bottom>=0&&box.top<=innerHeight*3&&box.right>0&&box.left<innerWidth, priority:r.reading && onScreen ? 0 : r.reading && nearby ? 1 : onScreen ? 2 : 3, distance:onScreen ? Math.max(0,box.top) : Math.abs(box.top) };
+    }).filter(item=>item.inRange).sort((a,b) => a.priority-b.priority || a.distance-b.distance);
     const pending=ranked.filter(r=>r.record.status==='new');
     if (!pending.length) return [];
     // Finish the visible/nearby prose before allowing menus to occupy slots.
     if (pending[0].priority>=2 && ranked.some(r=>r.priority<2 && r.record.status==='pending')) return [];
-    const visible = pending[0].priority < 3;
-    const blockLimit = !complete ? 4 : visible ? 8 : 18;
-    const charLimit = !complete ? 1800 : visible ? 3200 : 7000;
+    const priority=pending[0].priority;
+    // Keep the current view quick; amortize instructions over larger offscreen batches.
+    const blockLimit = priority===3 ? 24 : priority===1 ? 12 : !complete ? 4 : 8;
+    const charLimit = priority===3 ? 12000 : priority===1 ? 5000 : !complete ? 1800 : 3200;
     const current = []; let size=0, fragments=0, allShort=true;
     for (const {record,priority} of pending) {
       const n = record.parts.reduce((v,p) => v+p.source.length,0);
@@ -584,6 +586,7 @@
 
   async function start() {
     if (busy || mode !== 'running' || failed) return;
+    if(document.hidden){notify('다른 탭을 보는 동안 새 번역을 기다려요.');return;}
     const run = ++token;
     busy = true;
     currentUrl = pageUrl();
@@ -615,7 +618,7 @@
           if (dirty) continue;
           // Give rendering a moment to settle, then collect once more before reporting completion.
           // Bounded per run; unchanged records retain results and never become new AI requests.
-          if(hadRequests&&completionChecks<2){
+          if(hadRequests&&!document.hidden&&completionChecks<2){
             completionChecks++;
             notify('빠진 문단이 있는지 확인하고 있어요…');
             await new Promise(resolve=>setTimeout(resolve,250));
@@ -653,7 +656,7 @@
       }
       busy=false;
       if (stats && stats.totalMs === null) stats.totalMs=Math.round(performance.now()-stats.startedAt);
-      notify(skipped ? `번역 항목 ${skipped}개는 확인이 필요해요. 문단의 ! 표시를 확인해 주세요.` : !records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
+      notify(document.hidden ? '다른 탭을 보는 동안 새 번역을 기다려요.' : skipped ? `번역 항목 ${skipped}개는 확인이 필요해요. 문단의 ! 표시를 확인해 주세요.` : !records.length ? '번역할 텍스트가 나타나면 자동으로 읽어요.' : records.some(r=>r.status==='new') ? '읽는 범위 번역 완료 · 스크롤하면 이어서 번역해요.' : '번역 완료 · 새로 나타나는 내용도 자동으로 읽어요.');
     } catch(e) {
       if (run !== token) return;
       failed=true;
@@ -670,7 +673,7 @@
     if(!live())return;
     if (mode !== 'running' || failed) return;
     dirty = true;
-    if (busy || waiting || scanTimer !== undefined) return;
+    if (document.hidden || busy || waiting || scanTimer !== undefined) return;
     scanTimer = setTimeout(() => { scanTimer = undefined; if (mode === 'running' && !busy && !waiting && !failed) start(); }, 500);
   }
 
@@ -753,6 +756,13 @@
     } catch {} // An unstarted reader stays silent when the extension is reloaded.
   }
   window.addEventListener('pageshow', event => { if (event.persisted) synchronize(); },{signal:lifecycle.signal});
+  document.addEventListener('visibilitychange',()=>{
+    if(!live()||mode!=='running')return;
+    if(document.hidden){
+      clearTimeout(scanTimer);scanTimer=undefined;
+      if(!busy){clearTimeout(readyTimer);waiting=false;notify('다른 탭을 보는 동안 새 번역을 기다려요.');}
+    }else requestScan();
+  },{signal:lifecycle.signal});
   document.addEventListener('sulsul-reader-claim',dispose,{signal:lifecycle.signal});
   globalThis.__sulsul = { state,dispose };
   const initialMotionRevision=motionRevision;
