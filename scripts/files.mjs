@@ -14,7 +14,7 @@ export const runtimeFiles = [
   'host/core.mjs','host/runner.mjs','host/host.mjs','host/Launcher.cs','host/setup-runtime.mjs','host/translation.schema.json','host/provider-settings.mjs','host/providers.mjs'
 ];
 export const sourceFiles = [...runtimeFiles,
-  'tests/browser/motion.mjs','tests/browser/single-reader.mjs',
+  'tests/browser/original-hover.mjs','tests/browser/motion.mjs','tests/browser/single-reader.mjs',
   'tests/browser/completion.mjs',
   'tests/history-charts.test.mjs',
   'tests/history.test.mjs','tests/browser/history.mjs',

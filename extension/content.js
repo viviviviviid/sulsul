@@ -12,7 +12,7 @@
   const UNTRANSLATED_MESSAGE='AI가 이 문단을 번역하지 않고 원문으로 돌려줬어요. 한 번 더 요청했지만 같아 자동 재시도를 멈췄어요.';
   // Mintlify renders prose paragraphs as direct spans, without p elements.
   const BLOCKS = 'h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,figcaption,blockquote,.mdx-content > span';
-  const EXCLUDE = '[role="timer"],pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui],[data-sulsul-issue]';
+  const EXCLUDE = '[role="timer"],pre,script,style,noscript,svg,math,input,textarea,select,iframe,object,canvas,video,audio,[contenteditable]:not([contenteditable="false"]),[aria-hidden="true"],[hidden],[inert],[data-sulsul-ui],[data-sulsul-issue],[data-sulsul-original]';
   const LOCKED = 'code,kbd,samp,var,[translate="no"],.notranslate';
   // Sanity stega metadata starts with four zero-width spaces. Preserve ordinary joiners.
   const readableText = text => text.replace(/\u200b{4}[\u200b-\u200d\ufeff]+/g, '');
@@ -26,6 +26,8 @@
   let cancellation = Promise.resolve();
   let nextId = 0, dirty = false, failed = false, scanTimer;
   let knownParts = new WeakMap();
+  let hoverRecords=new WeakMap(),originalTip,originalRecord,hoverTimer,hideTimer,descriptionTarget;
+  const hoverRoots=new WeakSet();
   let providerRevision = 'initial';
   let measurements = null;
   const corners = new Set(['top-left','top-right','bottom-left','bottom-right']);
@@ -41,7 +43,7 @@
     clearTimeout(readyTimer);clearTimeout(scanTimer);clearInterval(urlTimer);clearInterval(sweepTimer);
     lifecycle.abort();observer?.disconnect();for(const watcher of shadowObservers.values())watcher.disconnect();shadowObservers.clear();
     try{chrome.runtime.onMessage.removeListener(onMessage);chrome.storage.onChanged.removeListener(onStorageChange);}catch{}
-    toolbar?._cancelDrag();restore();toolbar?.remove();
+    toolbar?._cancelDrag();restore();hideOriginal(true);toolbar?.remove();
     if(globalThis.__sulsul?.dispose===dispose)delete globalThis.__sulsul;
     if(hadWork)try{chrome.runtime.sendMessage({type:'cancel',url:pageUrl()}).catch(()=>{});}catch{}
   }
@@ -62,6 +64,59 @@
     translated = complete > 0;
   }
 
+  function hideOriginal(remove=false){
+    clearTimeout(hoverTimer);clearTimeout(hideTimer);originalRecord=null;
+    if(descriptionTarget&&originalTip){
+      const ids=(descriptionTarget.getAttribute('aria-describedby')||'').split(/\s+/).filter(id=>id&&id!==originalTip.id);
+      if(ids.length)descriptionTarget.setAttribute('aria-describedby',ids.join(' '));else descriptionTarget.removeAttribute('aria-describedby');
+    }
+    descriptionTarget=null;
+    if(originalTip){originalTip.hidden=true;if(remove){originalTip.remove();originalTip=null;}}
+  }
+  function showOriginalTip(record,x,y,focusTarget){
+    if(!live()||mode==='off'||document.hidden||!record.applied||!unchanged(record,'translated'))return hideOriginal();
+    const text=record.parts.map(p=>readableText(p.original)).join('');
+    if(!text.trim())return hideOriginal();
+    if(!originalTip){
+      originalTip=document.createElement('div');originalTip.dataset.sulsulOriginal='';originalTip.id='sulsul-original-'+crypto.randomUUID();originalTip.setAttribute('role','tooltip');
+      const root=originalTip.attachShadow({mode:'closed'}),style=document.createElement('style');
+      style.textContent=`
+        :host{all:initial;display:block!important;position:fixed!important;z-index:2147483647!important;pointer-events:auto!important;width:min(460px,calc(100vw - 24px))!important;box-sizing:border-box!important}
+        :host([hidden]){display:none!important}
+        .card{box-sizing:border-box;padding:13px 16px 15px;background:rgba(251,252,253,.97);border:1px solid #dce1e8;border-radius:13px;box-shadow:0 8px 30px #18233424;backdrop-filter:blur(14px);color:#27303b;font:13px/1.7 system-ui,-apple-system,"Malgun Gothic",sans-serif;letter-spacing:normal;text-align:start}
+        .label{font-size:10px;color:#77818d;margin-bottom:6px;font-weight:650}
+        .text{max-height:min(280px,42vh);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;overscroll-behavior:contain}
+      `;
+      const card=document.createElement('div');card.className='card';const label=document.createElement('div');label.className='label';label.textContent='원문';
+      const body=document.createElement('div');body.className='text';body.dir='auto';card.append(label,body);root.append(style,card);originalTip._text=body;document.documentElement.append(originalTip);
+      originalTip.addEventListener('pointerenter',()=>clearTimeout(hideTimer));
+      originalTip.addEventListener('pointerleave',()=>{hideTimer=setTimeout(()=>hideOriginal(),160);});
+    }
+    originalTip._text.textContent=text;originalTip._text.scrollTop=0;originalTip.hidden=false;
+    originalTip.style.setProperty('left','0px','important');originalTip.style.setProperty('top','0px','important');
+    const box=originalTip.getBoundingClientRect(),left=Math.max(12,Math.min(innerWidth-box.width-12,x-24));
+    const top=y-box.height-14>=12?y-box.height-14:Math.max(12,Math.min(innerHeight-box.height-12,y+18));
+    originalTip.style.setProperty('left',left+'px','important');originalTip.style.setProperty('top',top+'px','important');
+    if(focusTarget instanceof Element){descriptionTarget=focusTarget;const ids=new Set((focusTarget.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean));ids.add(originalTip.id);focusTarget.setAttribute('aria-describedby',[...ids].join(' '));}
+  }
+  function watchOriginalHover(root){
+    if(hoverRoots.has(root))return;hoverRoots.add(root);
+    const over=event=>{
+      if(!live()||mode==='off'||(event.pointerType&&event.pointerType!=='mouse'&&event.pointerType!=='pen'))return;
+      const path=event.composedPath();if(originalTip&&path.includes(originalTip)){clearTimeout(hideTimer);return;}
+      const record=path.map(node=>hoverRecords.get(node)).find(Boolean);
+      if(!record?.applied||!unchanged(record,'translated')){clearTimeout(hoverTimer);if(originalRecord){clearTimeout(hideTimer);hideTimer=setTimeout(()=>hideOriginal(),160);}return;}
+      clearTimeout(hideTimer);if(record===originalRecord)return;
+      hideOriginal();originalRecord=record;
+      const focus=event.type==='focusin',box=record.element.getBoundingClientRect(),x=focus?box.left+24:event.clientX,y=focus?box.top:event.clientY;
+      hoverTimer=setTimeout(()=>showOriginalTip(record,x,y,focus?event.target:null),focus?0:320);
+    };
+    root.addEventListener('pointerover',over,{capture:true,signal:lifecycle.signal});
+    root.addEventListener('focusin',over,{capture:true,signal:lifecycle.signal});
+    root.addEventListener('pointerout',event=>{if(!event.relatedTarget)hideOriginal();},{capture:true,signal:lifecycle.signal});
+    root.addEventListener('focusout',()=>{if(descriptionTarget)hideOriginal();},{capture:true,signal:lifecycle.signal});
+  }
+
   function retryIssue(element) {
     const record=records.find(r=>r.element===element);
     if(record?.status==='untranslated'){
@@ -73,6 +128,7 @@
 
   function restoreRecord(record) {
     if (!record.applied) return;
+    if(originalRecord===record)hideOriginal();
     record.applied = false;
     for (const part of record.parts) {
       if (!part.locked && part.node.isConnected && part.node.data === record.result.get(part.id) && part.node.data !== part.original) part.node.data = part.original;
@@ -83,6 +139,7 @@
     if (shadowObservers.has(root)) return;
     const observer = new MutationObserver(onMutations);
     observer.observe(root, observationOptions);
+    watchOriginalHover(root);
     shadowObservers.set(root, observer);
   }
 
@@ -212,6 +269,8 @@
     knownParts = new WeakMap();
     for (const record of records) for (const part of record.parts) knownParts.set(part.node, { record, part });
     for (const [root, observer] of shadowObservers) if (!root.host.isConnected) { observer.disconnect(); shadowObservers.delete(root); }
+    hoverRecords=new WeakMap();for(const r of records)hoverRecords.set(r.element,r);
+    if(originalRecord&&!records.includes(originalRecord))hideOriginal();
     refreshCounts();
     return records;
   }
@@ -243,7 +302,7 @@
   }
 
   function restore() {
-    clearIssues();
+    hideOriginal();clearIssues();
     const restored = records.filter(r => r.applied).length;
     for (const record of records) restoreRecord(record);
     refreshCounts();
@@ -712,6 +771,7 @@
   }
   function onMutations(changes) {
     if(!live())return;
+    if(originalRecord&&!unchanged(originalRecord,'translated'))hideOriginal();
     navigate();
     if (mode === 'off') return;
     pruneToolbars();
@@ -737,6 +797,11 @@
   urlTimer=setInterval(() => { if (mode !== 'off') navigate(); }, 300);
   // attachShadow itself emits no document mutation; a slow sweep also finds late components.
   sweepTimer=setInterval(requestScan, 3000);
+  watchOriginalHover(document);
+  window.addEventListener('keydown',event=>{if(event.key==='Escape')hideOriginal();},{capture:true,signal:lifecycle.signal});
+  window.addEventListener('blur',()=>hideOriginal(),{signal:lifecycle.signal});
+  window.addEventListener('scroll',event=>{if(!event.composedPath().includes(originalTip))hideOriginal();},{passive:true,capture:true,signal:lifecycle.signal});
+  window.addEventListener('resize',()=>hideOriginal(),{passive:true,signal:lifecycle.signal});
   window.addEventListener('scroll', requestScan, { passive:true, capture:true,signal:lifecycle.signal });
   window.addEventListener('resize', () => { toolbar?._cancelDrag(); requestScan(); }, { passive:true,signal:lifecycle.signal });
   window.addEventListener('popstate', navigate,{signal:lifecycle.signal});
@@ -759,7 +824,7 @@
   document.addEventListener('visibilitychange',()=>{
     if(!live()||mode!=='running')return;
     if(document.hidden){
-      clearTimeout(scanTimer);scanTimer=undefined;
+      hideOriginal();clearTimeout(scanTimer);scanTimer=undefined;
       if(!busy){clearTimeout(readyTimer);waiting=false;notify('다른 탭을 보는 동안 새 번역을 기다려요.');}
     }else requestScan();
   },{signal:lifecycle.signal});
