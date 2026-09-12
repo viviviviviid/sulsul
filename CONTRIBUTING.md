@@ -2,6 +2,8 @@
 
 버그 수정, 사이트 재현 사례, 한국어 표현 개선, 다른 운영체제 지원을 환영합니다.
 
+개발 환경·파일별 역할·검증 절차는 [에이전트 가이드](AGENTS.md)에 정리되어 있습니다. AI 에이전트에게 작업을 맡길 때도 이 문서를 안내하세요. 내부 동작은 [구조 설명](docs/architecture.md), 패키지 생성·공개는 [배포자 가이드](docs/publishing.md)를 참고하세요.
+
 1. 저장소를 포크하고 변경 브랜치를 만듭니다.
 2. Node.js LTS에서 `npm ci` 후 수정합니다.
 3. `npm run check`, `npm test`를 실행합니다. 본문 추출·탭 이동·UI 변경은 `npx playwright install chromium` 후 `npm run test:browser`도 실행합니다.

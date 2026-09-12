@@ -6,7 +6,7 @@ ChatGPT 연결을 누르면 고정 버전의 공식 Codex 실행 파일을 npm �
 
 ChatGPT 로그인은 계정의 Codex 이용 한도를 사용합니다. ChatGPT 웹 대화의 사용량과 동일하다고 가정하지 마세요. 이용 권한과 한도는 본인 계정에 따릅니다. [공식 인증](https://learn.chatgpt.com/docs/auth) · [공식 앱 연결](https://learn.chatgpt.com/docs/app-server).
 
-**ChatGPT 설정 → 모델 설정**의 기본값 `default`는 계정 기본 모델입니다. 선택 목록에는 GPT-5.6 Luna·Terra·Sol, GPT-6 Astra, GPT-5.3 Codex Spark가 있으며 **직접 입력**으로 다른 Codex 모델 ID를 저장할 수도 있습니다. 이 목록은 계정에서 조회한 결과가 아니므로 **모델 저장 → 연결 확인**으로 사용 가능 여부를 확인하세요.
+**ChatGPT 설정 → 모델 설정**의 기본값 `default`는 계정 기본 모델입니다. 선택 목록에는 GPT-5.6 Luna·Terra·Sol, GPT-6 Astra, GPT-5.3 Codex Spark가 있으며 **직접 입력**으로 다른 Codex 모델 ID를 저장할 수도 있습니다. 이 목록은 계정에서 조회한 결과가 아니며 실제 모델 사용 가능 여부는 번역할 때 확인됩니다. **연결 확인**은 로그인 상태만 확인합니다.
 
 Fast 모드는 기본적으로 꺼져 있습니다. 켜면 지원되는 모델에서 속도를 높이는 대신 사용량이 더 차감됩니다. 지원 여부와 차감 기준은 [OpenAI Fast 모드 안내](https://learn.chatgpt.com/docs/agent-configuration/speed)를 확인하세요. 번역 요청의 추론 수준은 Fast 설정과 관계없이 `low`입니다.
 

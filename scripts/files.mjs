@@ -6,7 +6,7 @@ export const runtimeFiles = [
   'docs/images/reading-translated.png','docs/images/reading-original.png','docs/images/popup.png',
   'extension/icons/icon-16.png','extension/icons/icon-32.png','extension/icons/icon-48.png','extension/icons/icon-128.png',
   'LICENSE','README.md','PRIVACY.md','CHANGELOG.md','설치안내.txt','package.json','package-lock.json',
-  'CONTRIBUTING.md','SECURITY.md','docs/installation.md','docs/architecture.md','docs/publishing.md','docs/providers.md',
+  'AGENTS.md','CONTRIBUTING.md','SECURITY.md','docs/installation.md','docs/usage.md','docs/architecture.md','docs/publishing.md','docs/providers.md',
   'install.cmd','install.ps1','uninstall.cmd','uninstall.ps1',
   'install.command','uninstall.command','scripts/install-macos.mjs',
   'host/account-runtime.mjs','host/account-providers.mjs','host/account-login.mjs','extension/login.html','extension/login.js',
